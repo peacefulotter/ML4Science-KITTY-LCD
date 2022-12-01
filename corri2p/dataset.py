@@ -86,17 +86,17 @@ class FarthestSampler:
 
 
 class kitti_pc_img_dataset(data.Dataset):
-    def __init__(self, root_path, mode, num_pc,
+    def __init__(self, root_path, mode, num_pc, img_width=160, img_height=512,
                  P_tx_amplitude=5, P_ty_amplitude=5, P_tz_amplitude=5,
-                 P_Rx_amplitude=0, P_Ry_amplitude=2.0 * math.pi, P_Rz_amplitude=0,num_kpt=512,is_front=False):
-        super(kitti_pc_img_dataset, self).__init__()
+                 P_Rx_amplitude=0, P_Ry_amplitude=2.0 * math.pi, P_Rz_amplitude=0,num_kpt=512,is_front=False, *args, **kwargs):
+        super(kitti_pc_img_dataset, self).__init__(*args, **kwargs)
         self.root_path = root_path
         self.mode = mode
         self.dataset = self.make_kitti_dataset(root_path, mode)
         self.calibhelper = KittiCalibHelper(root_path)
         self.num_pc = num_pc
-        self.img_H = 160
-        self.img_W = 512
+        self.img_H = img_height
+        self.img_W = img_width
 
         self.P_tx_amplitude = P_tx_amplitude
         self.P_ty_amplitude = P_ty_amplitude
@@ -254,14 +254,13 @@ class kitti_pc_img_dataset(data.Dataset):
 
     def __getitem__(self, index):
         img_folder, pc_folder, K_folder, seq, seq_i, key, _ = self.dataset[index]
-        logger.info("img_folder: " + img_folder + ", pc_folder: " + pc_folder)
+        # logger.debug("key: " + str(key) + ", seq_i: " + str(seq_i) )
+        # logger.debug("img_folder: " + img_folder + ", pc_folder: " + pc_folder)
         img = np.load(os.path.join(img_folder, '%06d.npy' % seq_i))
         data = np.load(os.path.join(pc_folder, '%06d.npy' % seq_i))
-        logger.info("img: " + str(img.shape) + " data: " + str(data.shape))
         intensity = data[3:4, :]
         sn = data[4:, :]
         pc = data[0:3, :]
-
 
         P_Tr = np.dot(self.calibhelper.get_matrix(seq, key),
                       self.calibhelper.get_matrix(seq, 'Tr'))
@@ -275,10 +274,10 @@ class kitti_pc_img_dataset(data.Dataset):
 
         pc, intensity, sn = self.downsample_np(pc, intensity,sn)
 
-        img = cv2.resize(img,
-                         (int(round(img.shape[1] * 0.5)),
-                          int(round((img.shape[0] * 0.5)))),
-                         interpolation=cv2.INTER_LINEAR)
+        # img = cv2.resize(img,
+        #                  (int(round(img.shape[1] * 0.5)),
+        #                   int(round((img.shape[0] * 0.5)))),
+        #                  interpolation=cv2.INTER_LINEAR)
         K = self.camera_matrix_scaling(K, 0.5)
 
         if 'train' == self.mode:
@@ -298,7 +297,6 @@ class kitti_pc_img_dataset(data.Dataset):
         if 'train' == self.mode:
             img = self.augment_img(img)
 
-        
         pc_ = np.dot(K_4, pc)
         pc_mask = np.zeros((1, np.shape(pc)[1]), dtype=np.float32)
         pc_[0:2, :] = pc_[0:2, :] / pc_[2:, :]
@@ -342,7 +340,7 @@ class kitti_pc_img_dataset(data.Dataset):
                                                                             replace=False)],
                                                                             k=self.node_b_num)
 
-        img = torch.from_numpy(img.astype(np.float32) / 255.).permute(2, 0, 1).contiguous()
+        # img = torch.from_numpy(img.astype(np.float32) / 255.).permute(2, 0, 1).contiguous()
         pc = torch.from_numpy(pc.astype(np.float32))
 
         return {'img': img,

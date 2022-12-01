@@ -270,15 +270,20 @@ class kitti_pc_img_dataset(data.Dataset):
 
         K = np.load(os.path.join(K_folder, '%06d.npy' % seq_i))
 
+        # Downsampling
         pc, intensity, sn = self.downsample_with_intensity_sn(pc, intensity, sn, voxel_grid_downsample_size=0.1)
-
         pc, intensity, sn = self.downsample_np(pc, intensity,sn)
 
-        # img = cv2.resize(img,
-        #                  (int(round(img.shape[1] * 0.5)),
-        #                   int(round((img.shape[0] * 0.5)))),
-        #                  interpolation=cv2.INTER_LINEAR)
-        K = self.camera_matrix_scaling(K, 0.5)
+        # Resize
+        resizing = False
+        # FIXME: what they do by default - why
+        if resizing:
+            resize_factor = 0.5
+            img = cv2.resize(img,
+                             (int(round(img.shape[1] * resize_factor)),
+                              int(round((img.shape[0] * resize_factor)))),
+                             interpolation=cv2.INTER_LINEAR)
+            K = self.camera_matrix_scaling(K, resize_factor)
 
         if 'train' == self.mode:
             img_crop_dx = random.randint(0, img.shape[1] - self.img_W)
@@ -326,6 +331,15 @@ class kitti_pc_img_dataset(data.Dataset):
 
         P = self.generate_random_transform()
 
+        # x = Pi * Tr * X
+        # print(P_Tr.shape, P_Tr)
+        # print(seq, key)
+        # Pi = self.calibhelper.get_matrix(seq, key)
+        # Tr = self.calibhelper.get_matrix(seq, 'Tr')
+        # print(Pi.shape, Tr.shape)
+        # pixels = np.dot(np.dot(Pi, Tr), pc[0])
+        # print(pixels.shape)
+
         pc = np.dot(P[0:3, 0:3], pc) + P[0:3, 3:]
 
         sn = np.dot(P[0:3, 0:3], sn)
@@ -339,50 +353,54 @@ class kitti_pc_img_dataset(data.Dataset):
                                                                             self.node_b_num * 8,
                                                                             replace=False)],
                                                                             k=self.node_b_num)
-
-        # img = torch.from_numpy(img.astype(np.float32) / 255.).permute(2, 0, 1).contiguous()
+        # img = torch.from_numpy(img)
+        img = torch.from_numpy(img.astype(np.float32) / 255.).permute(2, 0, 1).contiguous()
         pc = torch.from_numpy(pc.astype(np.float32))
 
-        return {'img': img,
-                'pc': pc,
-                'intensity': torch.from_numpy(intensity.astype(np.float32)),
-                'sn': torch.from_numpy(sn.astype(np.float32)),
-                'K': torch.from_numpy(K_4.astype(np.float32)),
-                'P': torch.from_numpy(np.linalg.inv(P).astype(np.float32)),
+        return {
+            'img': img,
+            'pc': pc,
+            'intensity': torch.from_numpy(intensity.astype(np.float32)),
+            'sn': torch.from_numpy(sn.astype(np.float32)),
+            'K': torch.from_numpy(K_4.astype(np.float32)),
+            'P': torch.from_numpy(np.linalg.inv(P).astype(np.float32)),
 
-                'pc_mask': torch.from_numpy(pc_mask).float(),       #(1,20480)
-                'img_mask': torch.from_numpy(img_mask).float(),     #(40,128)
-                
-                'pc_kpt_idx': torch.from_numpy(pc_kpt_idx),         #512
-                'pc_outline_idx':torch.from_numpy(pc_outline_idx),  #512
-                'img_kpt_idx':torch.from_numpy(img_kpt_index).long() ,      #512
-                'img_outline_index':torch.from_numpy(img_outline_index).long(),
-                'node_a':torch.from_numpy(node_a_np).float(),
-                'node_b':torch.from_numpy(node_b_np).float()
-                }
+            'pc_mask': torch.from_numpy(pc_mask).float(),       #(1,20480)
+            'img_mask': torch.from_numpy(img_mask).float(),     #(40,128)
+            
+            'pc_kpt_idx': torch.from_numpy(pc_kpt_idx),         #512
+            'pc_outline_idx':torch.from_numpy(pc_outline_idx),  #512
+            'img_kpt_idx':torch.from_numpy(img_kpt_index).long() ,      #512
+            'img_outline_index':torch.from_numpy(img_outline_index).long(),
+            'node_a':torch.from_numpy(node_a_np).float(),
+            'node_b':torch.from_numpy(node_b_np).float()
+        }
                
 
 
 if __name__ == '__main__':
     # '/gpfs1/scratch/siyuren2/dataset/'
-    dataset = kitti_pc_img_dataset("./", 'train', 2400)
-    data = dataset[100]
-    
-    '''img=data[0].numpy()              #full size
-    pc=data[1].numpy()
-    intensity=data[2].numpy()
-    sn=data[3].numpy()
-    K=data[4].numpy()
-    P=data[5].numpy()
-    pc_mask=data[6].numpy()      
-    img_mask=data[7].numpy()    #1/4 size
+    num_pc = 2048
+    w = 128
+    h = 128
+    dataset = kitti_pc_img_dataset(root_path="./", mode='train', num_pc=num_pc, img_width=w, img_height=h)
+    data = dataset[0]
 
-    pc_kpt_idx=data[8].numpy()                #(B,512)
-    pc_outline_idx=data[9].numpy()
-    img_kpt_idx=data[10].numpy()
-    img_outline_idx=data[11].numpy()
+    img=data['img'].numpy()              #full size
+    pc=data['pc'].numpy()
+    intensity=data['intensity'].numpy()
+    sn=data["sn"].numpy()
+    K=data['K'].numpy()
+    P=data["P"].numpy()
+    pc_mask=data['pc_mask'].numpy()      
+    img_mask=data['img_mask'].numpy()    #1/4 size
 
-    np.save('./test_data/img.npy',img)
+    pc_kpt_idx=data['pc_kpt_idx'].numpy()                #(B,512)
+    pc_outline_idx=data['pc_outline_idx'].numpy()
+    img_kpt_idx=data['img_kpt_idx'].numpy()
+    img_outline_idx=data['img_outline_index'].numpy()
+
+    '''np.save('./test_data/img.npy',img)
     np.save('./test_data/pc.npy',pc)
     np.save('./test_data/intensity.npy',intensity)
     np.save('./test_data/sn.npy',sn)
@@ -391,8 +409,6 @@ if __name__ == '__main__':
     np.save('./test_data/pc_mask.npy',pc_mask)
     np.save('./test_data/img_mask.npy',img_mask)
     '''
-
-
 
     '''for i,data in enumerate(dataset):
         print(i,data['pc'].size())'''
@@ -409,30 +425,24 @@ if __name__ == '__main__':
     # np.save('./test_data/pc_mask.npy', data['pc_mask'].numpy())
     # np.save('./test_data/K.npy', data['K'].numpy())
     
-
-    """
-    img = dict['img'].numpy()
-    img_mask = dict['img_mask'].numpy()
+    img = data['img'].numpy()
+    img_mask = data['img_mask'].numpy()
     img = img.transpose(1, 2, 0)
-    cv2.imwrite('img.png',np.uint8(img*255))
-    cv2.imwrite('img_mask.png', np.uint8(img_mask * 255))
-    cv2.imshow('img', cv2.resize(img,(512,160)))
-    cv2.imshow('img_mask', cv2.resize(img_mask,(512,160)))
 
     color = []
-    for i in range(np.shape(pc_data)[1]):
+    for i in range(np.shape(pc)[1]):
         if pc_mask[0, i] > 0:
             color.append([0, 1, 1])
         else:
             color.append([0, 0, 1])
     color = np.asarray(color, dtype=np.float64)
-    print(color.shape)
+    print(color.shape, sn.shape)
 
     print(np.sum(pc_mask), np.sum(img_mask))
     pointcloud = o3d.geometry.PointCloud()
-    pointcloud.points = o3d.utility.Vector3dVector(pc_data.T)
+    pointcloud.points = o3d.utility.Vector3dVector(pc.T)
     pointcloud.colors = o3d.utility.Vector3dVector(color)
-
     o3d.visualization.draw_geometries([pointcloud])
-    # plt.imshow(dict['img'].permute(1,2,0).numpy())
-    # plt.show()"""
+
+    # plt.imshow(data['img'].permute(1,2,0).numpy())
+    # plt.show()

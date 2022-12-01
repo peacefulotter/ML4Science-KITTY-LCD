@@ -12,6 +12,7 @@ import struct
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 from scipy.sparse import coo_matrix
+from loguru import logger
 
 
 class KittiCalibHelper:
@@ -22,10 +23,12 @@ class KittiCalibHelper:
     def read_calib_files(self):
         seq_folders = [name for name in os.listdir(
             os.path.join(self.root_path, 'calib'))]
+        logger.debug("seq_folders", seq_folders)
         calib_matrix_dict = {}
         for seq in seq_folders:
             calib_file_path = os.path.join(
                 self.root_path, 'calib', seq, 'calib.txt')
+            logger.debug(calib_file_path)
             with open(calib_file_path, 'r') as f:
                 for line in f.readlines():
                     seq_int = int(seq)
@@ -69,7 +72,7 @@ class FarthestSampler:
 
     def sample(self, pts, k):
         farthest_pts = np.zeros((self.dim, k))
-        farthest_pts_idx = np.zeros(k, dtype=np.int)
+        farthest_pts_idx = np.zeros(k, dtype=int)
         init_idx = np.random.randint(len(pts))
         farthest_pts[:, 0] = pts[:, init_idx]
         farthest_pts_idx[0] = init_idx
@@ -123,7 +126,7 @@ class kitti_pc_img_dataset(data.Dataset):
         dataset = []
 
         if mode == 'train':
-            seq_list = list(range(9))
+            seq_list = [0] # TODO: replace with list(range(9))
         elif 'val' == mode:
             seq_list = [9, 10]
         else:
@@ -143,7 +146,9 @@ class kitti_pc_img_dataset(data.Dataset):
             K3_folder = os.path.join(
                 root_path, 'sequences', '%02d' % seq, 'K_P3')
 
+            logger.debug(img2_folder, img3_folder, pc_folder, K2_folder, K3_folder)
             sample_num = round(len(os.listdir(img2_folder)))
+            logger.debug(sample_num)
 
             for i in range(skip_start_end, sample_num - skip_start_end):
                 dataset.append((img2_folder, pc_folder,
@@ -249,8 +254,10 @@ class kitti_pc_img_dataset(data.Dataset):
 
     def __getitem__(self, index):
         img_folder, pc_folder, K_folder, seq, seq_i, key, _ = self.dataset[index]
+        logger.info("img_folder: " + img_folder + ", pc_folder: " + pc_folder)
         img = np.load(os.path.join(img_folder, '%06d.npy' % seq_i))
         data = np.load(os.path.join(pc_folder, '%06d.npy' % seq_i))
+        logger.info("img: " + str(img.shape) + " data: " + str(data.shape))
         intensity = data[3:4, :]
         sn = data[4:, :]
         pc = data[0:3, :]
@@ -261,8 +268,6 @@ class kitti_pc_img_dataset(data.Dataset):
 
         pc = np.dot(P_Tr[0:3, 0:3], pc) + P_Tr[0:3, 3:]
         sn = np.dot(P_Tr[0:3, 0:3], sn)
-
-
 
         K = np.load(os.path.join(K_folder, '%06d.npy' % seq_i))
 
@@ -337,8 +342,13 @@ class kitti_pc_img_dataset(data.Dataset):
                                                                             replace=False)],
                                                                             k=self.node_b_num)
 
-        return {'img': torch.from_numpy(img.astype(np.float32) / 255.).permute(2, 0, 1).contiguous(),
-                'pc': torch.from_numpy(pc.astype(np.float32)),
+        img = torch.from_numpy(img.astype(np.float32) / 255.).permute(2, 0, 1).contiguous()
+        print(img.shape)
+        pc = torch.from_numpy(pc.astype(np.float32))
+        print(pc.shape)
+
+        return {'img': img,
+                'pc': pc,
                 'intensity': torch.from_numpy(intensity.astype(np.float32)),
                 'sn': torch.from_numpy(sn.astype(np.float32)),
                 'K': torch.from_numpy(K_4.astype(np.float32)),
@@ -358,8 +368,9 @@ class kitti_pc_img_dataset(data.Dataset):
 
 
 if __name__ == '__main__':
-    dataset = kitti_pc_img_dataset('/gpfs1/scratch/siyuren2/dataset/', 'val', 20480)
-    data = dataset[4000]
+    # '/gpfs1/scratch/siyuren2/dataset/'
+    dataset = kitti_pc_img_dataset("./", 'train', 2400)
+    data = dataset[100]
     
     '''img=data[0].numpy()              #full size
     pc=data[1].numpy()
@@ -390,17 +401,17 @@ if __name__ == '__main__':
     '''for i,data in enumerate(dataset):
         print(i,data['pc'].size())'''
 
-    print(len(dataset))
-    print(data['pc'].size())
-    print(data['img'].size())
-    print(data['pc_mask'].size())
-    print(data['intensity'].size())
-    np.save('./test_data/pc.npy', data['pc'].numpy())
-    np.save('./test_data/P.npy', data['P'].numpy())
-    np.save('./test_data/img.npy', data['img'].numpy())
-    np.save('./test_data/img_mask.npy', data['img_mask'].numpy())
-    np.save('./test_data/pc_mask.npy', data['pc_mask'].numpy())
-    np.save('./test_data/K.npy', data['K'].numpy())
+    # print(len(dataset))
+    # print(data['pc'].size())
+    # print(data['img'].size())
+    # print(data['pc_mask'].size())
+    # print(data['intensity'].size())
+    # np.save('./test_data/pc.npy', data['pc'].numpy())
+    # np.save('./test_data/P.npy', data['P'].numpy())
+    # np.save('./test_data/img.npy', data['img'].numpy())
+    # np.save('./test_data/img_mask.npy', data['img_mask'].numpy())
+    # np.save('./test_data/pc_mask.npy', data['pc_mask'].numpy())
+    # np.save('./test_data/K.npy', data['K'].numpy())
     
 
     """

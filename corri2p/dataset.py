@@ -343,9 +343,7 @@ class kitti_pc_img_dataset(data.Dataset):
                                                                             k=self.node_b_num)
 
         img = torch.from_numpy(img.astype(np.float32) / 255.).permute(2, 0, 1).contiguous()
-        print(img.shape)
         pc = torch.from_numpy(pc.astype(np.float32))
-        print(pc.shape)
 
         return {'img': img,
                 'pc': pc,

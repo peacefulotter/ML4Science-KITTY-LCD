@@ -15,8 +15,8 @@ from lcd.losses import *
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--config", help="path to the json config file")
-parser.add_argument("--logdir", help="path to the log directory")
+parser.add_argument("--config", help="path to the json config file", default="config.json")
+parser.add_argument("--logdir", help="path to the log directory", default="./logs/LCD")
 args = parser.parse_args()
 
 config = args.config
@@ -30,7 +30,7 @@ fname = os.path.join(logdir, "config.json")
 with open(fname, "w") as fp:
     json.dump(args, fp, indent=4)
 
-device = args["device"]
+device = 'cuda' if args["device"] == 'cuda' and torch.cuda.is_available() else 'cpu'
 
 dataset = CrossTripletDataset(args["root"], split="train")
 loader = data.DataLoader(

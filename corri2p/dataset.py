@@ -15,9 +15,21 @@ from scipy.sparse import coo_matrix
 from loguru import logger
 
 
+"""
+calib.txt
+
+
+color tests:
+è  
+
+"""
+
+
 class KittiCalibHelper:
     def __init__(self, root_path):
         self.root_path = root_path
+        self.Pi = []
+        self.Tr = None
         self.calib_matrix_dict = self.read_calib_files()
 
     def read_calib_files(self):
@@ -28,7 +40,6 @@ class KittiCalibHelper:
         for seq in seq_folders:
             calib_file_path = os.path.join(
                 self.root_path, 'calib', seq, 'calib.txt')
-            logger.debug(calib_file_path)
             with open(calib_file_path, 'r') as f:
                 for line in f.readlines():
                     seq_int = int(seq)
@@ -38,12 +49,17 @@ class KittiCalibHelper:
                     key = line[0:2]
                     mat = np.fromstring(line[4:], sep=' ').reshape(
                         (3, 4)).astype(np.float32)
+                    print(key)
+                    print(mat)
+                    print()
                     if 'Tr' == key:
                         P = np.identity(4)
                         P[0:3, :] = mat
+                        self.Tr = P
                         calib_matrix_dict[seq_int][key] = P
                     else:
-                        K = mat[0:3, 0:3]
+                        # intrinsic cam mat k
+                        K = mat[0:3, 0:3] # camera parameters
                         calib_matrix_dict[seq_int][key + '_K'] = K
                         fx = K[0, 0]
                         fy = K[1, 1]
@@ -52,11 +68,14 @@ class KittiCalibHelper:
                         # mat[0, 3] = fx*tx + cx*tz
                         # mat[1, 3] = fy*ty + cy*tz
                         # mat[2, 3] = tz
+                        # TRANSFORMATION - camera position<
                         tz = mat[2, 3]
                         tx = (mat[0, 3] - cx * tz) / fx
                         ty = (mat[1, 3] - cy * tz) / fy
                         P = np.identity(4)
                         P[0:3, 3] = np.asarray([tx, ty, tz])
+                        P[:3, :3] = K
+                        self.Pi.append(P)
                         calib_matrix_dict[seq_int][key] = P
         return calib_matrix_dict
 
@@ -111,6 +130,12 @@ class kitti_pc_img_dataset(data.Dataset):
         self.node_b_num=256
         self.is_front=is_front
         print('load data complete')
+
+    def get_Pi(self, i):
+        return self.calibhelper.Pi[i]
+
+    def get_Tr(self):
+        return self.calibhelper.Tr
 
     def read_velodyne_bin(self, path):
 
@@ -261,10 +286,12 @@ class kitti_pc_img_dataset(data.Dataset):
         intensity = data[3:4, :]
         sn = data[4:, :]
         pc = data[0:3, :]
+        raw_pc = pc
 
         P_Tr = np.dot(self.calibhelper.get_matrix(seq, key),
                       self.calibhelper.get_matrix(seq, 'Tr'))
 
+        # rotation * pc + translation
         pc = np.dot(P_Tr[0:3, 0:3], pc) + P_Tr[0:3, 3:]
         sn = np.dot(P_Tr[0:3, 0:3], sn)
 
@@ -358,6 +385,8 @@ class kitti_pc_img_dataset(data.Dataset):
         pc = torch.from_numpy(pc.astype(np.float32))
 
         return {
+            'seq_i': seq_i,
+            'raw_pc': raw_pc,
             'img': img,
             'pc': pc,
             'intensity': torch.from_numpy(intensity.astype(np.float32)),
@@ -439,8 +468,9 @@ if __name__ == '__main__':
     print(color.shape, sn.shape)
 
     print(np.sum(pc_mask), np.sum(img_mask))
+    print(pc_mask[pc_mask == 0].shape, pc_mask[pc_mask > 0].shape)
     pointcloud = o3d.geometry.PointCloud()
-    pointcloud.points = o3d.utility.Vector3dVector(pc.T)
+    pointcloud.points = o3d.utility.Vector3dVector(pc[pc_mask.astype(bool)].T)
     pointcloud.colors = o3d.utility.Vector3dVector(color)
     o3d.visualization.draw_geometries([pointcloud])
 

@@ -29,7 +29,7 @@ def get_p(mat):
 
 def read_calib_line(calib, line):
     key, mat = extract_key_mat(line)
-    calib[key] = get_tr(mat) if key == 'Tr' else get_p(mat)
+    calib[key] = mat # get_tr(mat) if key == 'Tr' else get_p(mat)
 
 def import_calib(path):
     seq_folders = [

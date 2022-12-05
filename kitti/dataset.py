@@ -9,9 +9,9 @@ from calib import import_calib
 from pointcloud import plot_pc, compare_pc
 
 # TODO: ImageFolder dataset
-class KittyDataset(data.Dataset):
-    def __init__(self, root, mode, num_pc, img_width, img_height, *args, **kwargs):
-        super(KittyDataset, self).__init__(*args, **kwargs)
+class KittiDataset(data.Dataset):
+    def __init__(self, root, mode, num_pc=4096, img_width=64, img_height=64, *args, **kwargs):
+        super(KittiDataset, self).__init__(*args, **kwargs)
         self.root = root
         self.mode = mode
         self.num_pc = num_pc
@@ -175,7 +175,7 @@ class KittyDataset(data.Dataset):
 if __name__ == '__main__':
     # idx = 50
     w, h = 1226, 360
-    dataset = KittyDataset(root="./", mode='train', num_pc=0, img_width=w, img_height=h)
+    dataset = KittiDataset(root="./", mode='train', num_pc=0, img_width=w, img_height=h)
     for idx in range(0, 200, 2):
         img, pc_colored = dataset[idx]
         # pc, colors = np.vsplit(pc_colored, 2)

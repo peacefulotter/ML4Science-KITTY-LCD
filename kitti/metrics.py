@@ -1,7 +1,35 @@
 import cv2
 import numpy as np
 
-from scipy.spatial.transform import Rotation
+from scipy.spatial.transform import Rotation as R
+
+def RRE(Rt, Re):
+    '''
+    params
+        Rt: ground-truth rotation matrix, shape=(3, 3)
+        Re: estimated rotation matrix, shape=(3, 3)
+
+    returns:
+        RRE (Relative Rotational Error) \n
+        rre = sum(abs(F(Rt^(-1) @ Re))) \n
+        where F(.) transforms a matrix to three Euler angle
+    '''
+    angles = np.linalg.inv(Rt) @ Re 
+    angles = R.from_matrix(angles)
+    angles = angles.as_euler('zyx', degrees=True)
+    return np.sum(np.abs(angles))
+
+def RTE(Tt, Te):
+    '''
+    params
+        Tt: ground-truth translation vector, shape=(3, 1)
+        Te: estimated translation vector, shape=(3, 1)
+
+    returns:
+        RTE (Relative Translational Error) \n
+        rte = ||Tt - Te|| \n
+    '''
+    return np.linalg.norm(Tt - Te)
 
 
 # TODO: see evaluate_odometry.cpp
@@ -69,7 +97,7 @@ def relative_error(pc, img_feature, pc_feature, img_score, pc_score, P_gr, K, *a
     P_diff = np.linalg.inv(P_pred) @ P_gr
     rte = np.linalg.norm(P_diff[0:3, 3])
     r_diff = P_diff[0:3, 0:3]
-    R_diff = Rotation.from_matrix(r_diff)
+    R_diff = R.from_matrix(r_diff)
     rre = np.sum(np.abs(R_diff.as_euler('xyz', degrees=True)))
     
     return rte, rre

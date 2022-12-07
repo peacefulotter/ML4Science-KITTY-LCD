@@ -20,6 +20,20 @@ ds = dataset.KittiDataset(
 	mode="train", 
 	num_pc=1024)
 
+# ds[0]  # in the render generated from this call, 
+  		 # I can't see any points. Did I miss something?
+#%%
+# below is an working example of projection;
+# I directly load a point cloud and an image
+# the peculiar thing is the matrix K, being unused here
+# CorrI2P uses K for cropping and scaling, but
+# the K loaded from the `K_P2` dir (line 42 this file)
+# is too large -- this causes the point cloud blows up
+# I use an identity matrix to substitute, and
+# it works pretty fine. But the cropping and scale 
+# is not handled by the code automatically, is an todo
+# but at least, all the transformation works
+
 sample_id = "000009"
 point_data = np.load(f"./sequences/00/pc_npy_with_normal/{sample_id}.npy")  
 points = point_data[0:3, :]
@@ -69,6 +83,7 @@ img_crop_dy = int((img.shape[0] - h) / 2)
 # K = camera_matrix_cropping(K, dx=img_crop_dx, dy=img_crop_dy)
 
 K = np.eye(3)
+K = camera_matrix_scaling(K, 1 / 4)  # the 1/4 is the number I saw in CorrI2P
 
 pts_front_cam = (K @ pts_front_cam.T).T
 
@@ -76,11 +91,10 @@ def z_projection(pts):
 	z = pts[:, 2:3]
 	return pts / z
 
-pts_on_camera_plane = z_projection(pts_front_cam) / 4
+pts_on_camera_plane = z_projection(pts_front_cam)
 
-in_image_mask = (
-	True
-	& (pts_on_camera_plane[:, 0] > 0) 
+in_image_mask = (  # take the points falling inside the image
+	  (pts_on_camera_plane[:, 0] > 0) 
 	& (pts_on_camera_plane[:, 0] < w) 
 	& (pts_on_camera_plane[:, 1] > 0) 
 	& (pts_on_camera_plane[:, 1] < h) 
@@ -96,4 +110,6 @@ plt.imshow(img, origin="lower")  # origin="lower" for the same coordinate system
 plt.axis("scaled")
 plt.show()
 
-# points_imgspace = (P_Tr @ np.vstack((points, np.ones((points.shape[1], )))))[:3, :]
+# %%
+# implement the colorization of the point cloud
+# choose the RGB from the image using the coords of the points

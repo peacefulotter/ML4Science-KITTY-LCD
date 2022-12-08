@@ -7,15 +7,14 @@ import torch.optim as optim
 import torch.utils.data as data
 from collections import defaultdict
 
-from lcd.dataset import CrossTripletDataset
 from lcd.models import *
 from lcd.losses import *
 
 from kitti.pointcloud import rigid_transform_3D
 from kitti.dataset import KittiDataset
 
-config = "../config.json"
-logdir = "../logs/LCD"
+config = "./config_kitti.json"
+logdir = "./logs/LCD"
 
 args = json.load(open(config))
 
@@ -28,7 +27,9 @@ with open(fname, "w") as fp:
 
 device = 'cuda' if args["device"] == 'cuda' and torch.cuda.is_available() else 'cpu'
 
-dataset = KittiDataset(args["root"], mode="train")
+img_width = 1225
+img_height = 319
+dataset = KittiDataset(args["root"], mode="train", img_width=img_width, img_height=img_height)
 loader = data.DataLoader(
     dataset,
     batch_size=args["batch_size"],
@@ -89,7 +90,10 @@ for epoch in range(args["epochs"]):
         scalars["loss_d"].append(loss_d)
         scalars["loss_r"].append(loss_r)
 
-        R, t = rigid_transform_3D(A, B)
+        print(x[0].shape, x[1].shape)
+        print(y0.shape, z0.shape)
+        print(y1.shape, z1.shape)
+        # R, t = rigid_transform_3D(A, B)
         
         now = datetime.datetime.now()
         log = "{} | Batch [{:04d}/{:04d}] | loss: {:.4f} |"

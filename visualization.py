@@ -93,10 +93,12 @@ def z_projection(pts):
 
 pts_on_camera_plane = z_projection(pts_front_cam)
 
+print(pts_on_camera_plane.shape)
+
 in_image_mask = (  # take the points falling inside the image
-	  (pts_on_camera_plane[:, 0] > 0) 
+	  (pts_on_camera_plane[:, 0] >= 0) 
 	& (pts_on_camera_plane[:, 0] < w) 
-	& (pts_on_camera_plane[:, 1] > 0) 
+	& (pts_on_camera_plane[:, 1] >= 0) 
 	& (pts_on_camera_plane[:, 1] < h) 
 )
 
@@ -113,3 +115,5 @@ plt.show()
 # %%
 # implement the colorization of the point cloud
 # choose the RGB from the image using the coords of the points
+
+# %%

@@ -6,6 +6,9 @@ import torch.utils.data as data
 import calib
 import pointcloud
 import plots
+
+import cv2
+import open3d as o3d
 # from .calib import import_calib
 # from .pointcloud import pointcloud2image
 # from .plots import plot_projected_depth
@@ -28,7 +31,7 @@ class KittiDataset(data.Dataset):
     def make_kitti_dataset(self):
         dataset = []
 
-        # TODO: replace with list(range(9)) 
+        # TODO: replace with list(range(9))
         seq_list = [0] if self.mode == 'train' else [9, 10]
 
         skip_start_end = 0
@@ -44,7 +47,7 @@ class KittiDataset(data.Dataset):
             for i in range(skip_start_end, sample_num - skip_start_end):
                 dataset.append((img2_folder, pc_folder, K2_folder, seq, i, 'P2', sample_num))
                 dataset.append((img3_folder, pc_folder, K3_folder, seq, i, 'P3', sample_num))
-        
+
         return dataset
 
     def load_npy(self, folder, seq_i):
@@ -58,13 +61,31 @@ class KittiDataset(data.Dataset):
         return img, pc, K
 
     def __len__(self):
-        return len(self.dataset) 
+        return len(self.dataset)
 
     def crop_img(self, img):
         w, h = self.img_w, self.img_h
         dx = np.random.randint(0, img.shape[1] - w)
         dy = np.random.randint(0, img.shape[0] - h)
         return img[dy: dy + h, dx: dx + w, :], dx, dy
+
+    def display_points_in_image(self, depth_mask, in_frame_mask, pc):
+        total_mask = self.combine_masks(depth_mask, in_frame_mask)
+        colors = np.zeros(pc.shape)
+        print(colors.shape)
+        colors[1, total_mask] = 190/255 # highlight selected points in green
+        colors[2, ~total_mask] = 120/255 # highlight unselected points in blue
+        plots.plot_pc(pc.T, colors.T)
+
+    #Combine sequential masks: where the second mask is used after the first one
+    def combine_masks(self, depth_mask, in_frame_mask):
+        mask = np.zeros(depth_mask.shape)
+        idx_in_frame = 0
+        for idx_depth, depth in enumerate(depth_mask):
+            if depth:
+                mask[idx_depth] = in_frame_mask[idx_in_frame]
+                idx_in_frame += 1
+        return mask.astype(bool)
 
     def __getitem__(self, index):
         img_folder, pc_folder, K_folder, seq, seq_i, key, _ = self.dataset[index]
@@ -91,7 +112,8 @@ class KittiDataset(data.Dataset):
         depth = pts_cam_T[:, 2]
 
         # discard the points behind the camera (of negative depth) -- these points get flip during the z_projection
-        pts_front_cam = pts_cam_T[~(depth < 0.1)]
+        depth_mask = ~(depth < 0.1)
+        pts_front_cam = pts_cam_T[depth_mask]
 
         def camera_matrix_cropping(K: np.ndarray, dx: float, dy: float):
             K_crop = np.copy(K)
@@ -107,7 +129,7 @@ class KittiDataset(data.Dataset):
         print(K.shape, pts_front_cam.shape)
 
         # K = np.eye(3)
-        # TODO: playing around with this value changes the pc 
+        # TODO: playing around with this value changes the pc
         K = camera_matrix_scaling(K, 1 / 1000)  # the 1/4 is the number I saw in CorrI2P
         K = camera_matrix_cropping(K, dx=dx, dy=dy)
 
@@ -115,25 +137,28 @@ class KittiDataset(data.Dataset):
 
         def z_projection(pts):
             z = pts[:, 2:3]
-            return pts / z
+            return pts / z, z
 
-        pts_on_camera_plane = z_projection(pts_front_cam)
+        pts_on_camera_plane, z = z_projection(pts_front_cam)
 
         # take the points falling inside the image
-        in_image_mask = (  
-            (pts_on_camera_plane[:, 0] >= 0) & 
-            (pts_on_camera_plane[:, 0] < self.img_w) & 
-            (pts_on_camera_plane[:, 1] >= 0) & 
-            (pts_on_camera_plane[:, 1] < self.img_h) 
+        in_image_mask = (
+            (pts_on_camera_plane[:, 0] >= 0) &
+            (pts_on_camera_plane[:, 0] < self.img_w) &
+            (pts_on_camera_plane[:, 1] >= 0) &
+            (pts_on_camera_plane[:, 1] < self.img_h)
         )
 
         # pts_in_frame = pointcloud2image(pc, Tr, Pi, self.img_w, self.img_h)
         pts_in_frame = pts_on_camera_plane[in_image_mask]
-        
+
         # TODO: add some noise to the color_mask
         color_mask = np.floor(pts_in_frame).astype(int)
         colors = img[ color_mask[:, 1], color_mask[:, 0] ] / 255 # (M, 3) RGB per point
-        pts_in_frame = np.c_[ pts_in_frame, colors ] 
+        #pts_in_frame = pts_in_frame*z[in_image_mask]
+        pts_in_frame = np.c_[ pts_in_frame, colors ]
+
+        self.display_points_in_image(depth_mask, in_image_mask, pc)
 
         return pts_in_frame, img
 

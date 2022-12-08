@@ -3,7 +3,7 @@ import open3d as o3d
 import matplotlib.pyplot as plt
 
 import pointcloud
-# from .pointcloud import project_image, proj_pixel_coordinates 
+# from .pointcloud import project_image, proj_pixel_coordinates
 
 colors = [
     [0.2, 0.2, 1],
@@ -19,7 +19,7 @@ def compare_pc(*pcs):
         _pc.points = o3d.utility.Vector3dVector(pc)
         _pc.paint_uniform_color(color)
         return _pc
-    
+
     o3d.visualization.draw_geometries([
         get_pc(pc, colors[i]) for i, pc in enumerate(pcs)
     ])
@@ -37,12 +37,12 @@ def plot_projected_depth(pc, Tr, P, img, img_w, img_h):
     # Project pointcloud to the i'th image plane
     projection, depth = pointcloud.project_image(pc, Tr, P)
     pixel_coordinates, indices = pointcloud.proj_pixel_coordinates(projection, img_w, img_h)
-    
+
     depth = depth[indices]
     print("pc original shape: ", pc.shape)
 
     pc = pc[:, indices]
-    
+
     # Establish empty render image, then fill with the depths of each point
     render = np.zeros((img_h, img_w))
     for j, (u, v) in enumerate(pixel_coordinates):

@@ -57,8 +57,10 @@ class KittiDataset(data.Dataset):
         img = self.load_npy(img_folder, seq_i)
         data = self.load_npy(pc_folder, seq_i)
         K = self.load_npy(K_folder, seq_i)
-        pc = data[:3, :]
-        return img, pc, K
+        pc = data[0:3, :]
+        intensity = data[3:4, :]
+        sn = data[4:, :] # surface normals
+        return img, pc, intensity, sn, K
 
     def __len__(self):
         return len(self.dataset)
@@ -87,13 +89,44 @@ class KittiDataset(data.Dataset):
                 idx_in_frame += 1
         return mask.astype(bool)
 
+    def voxel_down_sample(self, pc, intensity, sn, colors, voxel_grid_size=.1):
+        
+        # TODO: use intensity?
+        max_intensity = np.max(intensity)
+        # colors = colors * intensity / max_intensity   
+
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(pc)
+        pcd.colors = o3d.utility.Vector3dVector(colors)
+        pcd.normals = o3d.utility.Vector3dVector(sn)
+
+        down_pcd = pcd.voxel_down_sample(voxel_size=voxel_grid_size)
+        down_pcd_points = np.asarray(down_pcd.points)
+        down_pcd_colors = np.asarray(down_pcd.colors)
+        down_pcd_sn = np.asarray(down_pcd.normals)
+
+        # down_pcd_colors *= max_intensity
+
+        return down_pcd_points, down_pcd_colors, down_pcd_sn
+
+    def downsample_np(self, pc, colors):
+        nb_points = pc.shape[0]
+        if nb_points >= self.num_pc:
+            choice_idx = np.random.choice(nb_points, self.num_pc, replace=False)
+        else:
+            fix_idx = np.asarray(range(nb_points))
+            while nb_points + fix_idx.shape[0] < self.num_pc:
+                fix_idx = np.concatenate((fix_idx, np.asarray(range(nb_points))), axis=0)
+            random_idx = np.random.choice(nb_points, self.num_pc - fix_idx.shape[0], replace=False)
+            choice_idx = np.concatenate((fix_idx, random_idx), axis=0)
+        return pc[choice_idx], colors[choice_idx]
+
     def __getitem__(self, index):
         img_folder, pc_folder, K_folder, seq, seq_i, key, _ = self.dataset[index]
-        img_, pc, K = self.load_item(img_folder, pc_folder, K_folder, seq_i)
+        img, pc, intensity, sn, K = self.load_item(img_folder, pc_folder, K_folder, seq_i)
 
         # Take random part of the image of size (img_w, img_h)
-        img, dx, dy = self.crop_img(img_)
-        # plots.plot_imgs(img_, img)
+        img, dx, dy = self.crop_img(img)
 
         # Project point cloud to image
         Pi = self.calib[seq][key] # (3, 4)
@@ -114,6 +147,8 @@ class KittiDataset(data.Dataset):
         # discard the points behind the camera (of negative depth) -- these points get flip during the z_projection
         depth_mask = ~(depth < 0.1)
         pts_front_cam = pts_cam_T[depth_mask]
+        intensity_front_cam = intensity.T[depth_mask]
+        sn_front_cam = sn.T[depth_mask]
 
         def camera_matrix_cropping(K: np.ndarray, dx: float, dy: float):
             K_crop = np.copy(K)
@@ -146,27 +181,41 @@ class KittiDataset(data.Dataset):
             (pts_on_camera_plane[:, 1] >= 0) &
             (pts_on_camera_plane[:, 1] < self.img_h)
         )
-
-        # pts_in_frame = pointcloud2image(pc, Tr, Pi, self.img_w, self.img_h)
         pts_in_frame = pts_on_camera_plane[in_image_mask]
+        intensity_in_frame = intensity_front_cam[in_image_mask]
+        sn_in_frame = sn_front_cam[in_image_mask]
 
         # TODO: add some noise to the color_mask
         color_mask = np.floor(pts_in_frame).astype(int)
         colors = img[ color_mask[:, 1], color_mask[:, 0] ] / 255 # (M, 3) RGB per point
         #pts_in_frame = pts_in_frame*z[in_image_mask]
-        pts_in_frame = np.c_[ pts_in_frame, colors ]
 
-        self.display_points_in_image(depth_mask, in_image_mask, pc)
+        # Get the pointcloud in its original space
+        total_mask = self.combine_masks(depth_mask, in_image_mask)
+        pc_space = pc.T[total_mask]
 
-        return pts_in_frame, img
+        # Downsample pointcloud
+        pc_space, colors, sn = self.voxel_down_sample(pc_space, intensity_in_frame, sn_in_frame, colors)
+        pc_space, colors = self.downsample_np(pc_space, colors)
+        print(pc_space.shape)
+        pc_space = np.c_[ pc_space, colors ]
+
+        return pc_space, img
 
 
 if __name__ == '__main__':
     # idx = 50
     # w, h = 256, 128
-    w, h = 1225, 319
-    dataset = KittiDataset(root="./", mode='train', num_pc=0, img_width=w, img_height=h)
-    for idx in range(0, 1):
-        pc, img = dataset[idx]
+    w, h = 256, 256
+    for p in range(5):
+        num_pc = pow(2, p + 12)
+        dataset = KittiDataset(
+            root="./", 
+            mode='train', 
+            num_pc=num_pc, 
+            img_width=w, 
+            img_height=h
+        )
+        pc, img = dataset[0]
         pc, colors = np.hsplit(pc, 2)
         plots.plot_pc(pc, colors)

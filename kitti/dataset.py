@@ -104,8 +104,6 @@ class KittiDataset(data.Dataset):
             K_scale[2, 2] = 1
             return K_scale
 
-        print(K.shape, pts_front_cam.shape)
-
         # K = np.eye(3)
         # TODO: playing around with this value changes the pc 
         K = camera_matrix_scaling(K, 1 / 1000)  # the 1/4 is the number I saw in CorrI2P

@@ -3,15 +3,10 @@ import os
 import numpy as np
 import torch.utils.data as data
 
-import calib
-import pointcloud
-import plots
+from .calib import import_calib
+from .plots import plot_pc
 
-import cv2
 import open3d as o3d
-# from .calib import import_calib
-# from .pointcloud import pointcloud2image
-# from .plots import plot_projected_depth
 
 # TODO: ImageFolder dataset
 class KittiDataset(data.Dataset):
@@ -23,7 +18,7 @@ class KittiDataset(data.Dataset):
         self.img_w = img_width
         self.img_h = img_height
         self.dataset = self.make_kitti_dataset()
-        self.calib = calib.import_calib(root)
+        self.calib = import_calib(root)
 
     def get_dataset_folder(self, seq, name):
         return os.path.join(self.root, 'sequences', '%02d' % seq, name)
@@ -90,7 +85,6 @@ class KittiDataset(data.Dataset):
         return mask.astype(bool)
 
     def voxel_down_sample(self, pc, intensity, sn, colors, voxel_grid_size=.1):
-        
         # TODO: use intensity?
         max_intensity = np.max(intensity)
         # colors = colors * intensity / max_intensity   
@@ -194,10 +188,13 @@ class KittiDataset(data.Dataset):
         total_mask = self.combine_masks(depth_mask, in_image_mask)
         pc_space = pc.T[total_mask]
 
+        # TODO: delete (retries when no points)
+        if pc_space.shape[0] == 0:
+            return self.__getitem__(index)
+
         # Downsample pointcloud
         pc_space, colors, sn = self.voxel_down_sample(pc_space, intensity_in_frame, sn_in_frame, colors)
         pc_space, colors = self.downsample_np(pc_space, colors)
-        print(pc_space.shape)
         pc_space = np.c_[ pc_space, colors ]
 
         return pc_space, img
@@ -206,7 +203,7 @@ class KittiDataset(data.Dataset):
 if __name__ == '__main__':
     # idx = 50
     # w, h = 256, 128
-    w, h = 256, 256
+    w, h = 64, 64
     for p in range(5):
         num_pc = pow(2, p + 12)
         dataset = KittiDataset(

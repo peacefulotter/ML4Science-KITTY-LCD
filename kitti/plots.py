@@ -2,7 +2,7 @@ import numpy as np
 import open3d as o3d
 import matplotlib.pyplot as plt
 
-import pointcloud
+from .pointcloud import project_image, proj_pixel_coordinates
 # from .pointcloud import project_image, proj_pixel_coordinates
 
 colors = [
@@ -35,8 +35,8 @@ def plot_pc(pc, colors=None):
 def plot_projected_depth(pc, Tr, P, img, img_w, img_h):
 
     # Project pointcloud to the i'th image plane
-    projection, depth = pointcloud.project_image(pc, Tr, P)
-    pixel_coordinates, indices = pointcloud.proj_pixel_coordinates(projection, img_w, img_h)
+    projection, depth = project_image(pc, Tr, P)
+    pixel_coordinates, indices = proj_pixel_coordinates(projection, img_w, img_h)
 
     depth = depth[indices]
     print("pc original shape: ", pc.shape)

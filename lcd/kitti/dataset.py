@@ -59,9 +59,9 @@ class KittiDataset(data.Dataset):
     def __len__(self):
         return len(self.dataset)
 
-    def crop_img(self, img):
+    def crop_img(self, img, max_point_height = np.inf):
         w, h = self.img_w, self.img_h
-        dx = np.random.randint(0, img.shape[1] - w)
+        dx = np.random.randint(0, min(img.shape[1] - w, max_point_height))
         dy = np.random.randint(0, img.shape[0] - h)
         return img[dy: dy + h, dx: dx + w, :], dx, dy
 
@@ -85,7 +85,7 @@ class KittiDataset(data.Dataset):
     def voxel_down_sample(self, pc, intensity, sn, colors, voxel_grid_size=.1):
         # TODO: use intensity?
         max_intensity = np.max(intensity)
-        # colors = intensity / max_intensity   # colors * 
+        # colors = intensity / max_intensity   # colors *
 
         # colors=np.zeros((pc.shape[0],3))
         # colors[:,0:1]= intensity /max_intensity
@@ -177,6 +177,10 @@ class KittiDataset(data.Dataset):
         # K = camera_matrix_cropping(K, dx=dx, dy=dy)
 
         pts_front_cam = (K @ pts_front_cam.T).T
+        max_point_height = max(pts_front_cam[:, 2]) #heighest z val in point cloud projected to camera
+
+        # Take random part of the image of size (img_w, img_h)
+        img, dx, dy = self.crop_img(img, max_point_height)
 
         def z_projection(pts):
             z = pts[:, 2:3]
@@ -217,11 +221,11 @@ class KittiDataset(data.Dataset):
         from pointcloud import points_in_radius
         neighbors_indices = points_in_radius(pc_space)
         print(pc_space.shape, neighbors_indices.shape)
-        
+
         # Downsample pointcloud
         # pc_space, colors = self.downsample_np(pc_space, colors)
         pc_space = np.c_[ pc_space, colors ]
-        
+
         return pc_space, img
 
 
@@ -231,17 +235,17 @@ if __name__ == '__main__':
     sys.path.append('../')
     from models.patchnet import PatchNetAutoencoder
     from models.pointnet import PointNetAutoencoder
-    
+
     # idx = 50
     # w, h = 256, 128
     # w, h = 64, 64
     w, h = 1225, 319
     num_pc = pow(2,  14)
     dataset = KittiDataset(
-        root="../../", 
-        mode='train', 
-        num_pc=num_pc, 
-        img_width=w, 
+        root="../../",
+        mode='train',
+        num_pc=num_pc,
+        img_width=w,
         img_height=h
     )
     pc, img = dataset[199]

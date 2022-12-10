@@ -31,6 +31,33 @@ def rigid_transform_3D(A, B):
     return R, t
 
 
+def downsample(arr, num):
+    nb_points = arr.shape[0]
+    if nb_points >= num:
+        choice_idx = np.random.choice(nb_points, num, replace=False)
+    else:
+        fix_idx = np.asarray(range(nb_points))
+        while nb_points + fix_idx.shape[0] < num:
+            fix_idx = np.concatenate((fix_idx, np.asarray(range(nb_points))), axis=0)
+        random_idx = np.random.choice(nb_points, num - fix_idx.shape[0], replace=False)
+        choice_idx = np.concatenate((fix_idx, random_idx), axis=0)
+    return arr[choice_idx]
+
+
+def points_in_radius(pc, radius=1, num=1024):
+    print('Computing KDTree query_ball_point for', pc.shape[0], 'points')
+    import scipy.spatial as spatial
+    tree = spatial.KDTree(pc)
+    ball_points = tree.query_ball_point(pc, r=radius)
+    neighbors = np.zeros((pc.shape[0], num))
+    for i, indices in enumerate(ball_points):
+        indices = np.array(indices)
+        downsample_indices = downsample(indices, num=num)
+        neighbors[i] = downsample_indices
+    return neighbors
+
+
+
 def project_image(pc, Tr, P):
     # We know the lidar X axis points forward, we need nothing behind the lidar, so we
     # ignore anything with a X value less than or equal to zero
@@ -52,12 +79,13 @@ def project_image(pc, Tr, P):
     cam_xyz /= cam_xyz[2]
     
     # Add row of ones to make our 3D coordinates on plane homogeneous for dotting with P0
-    cam_xyz = np.vstack([cam_xyz, np.ones(cam_xyz.shape[1])])
-    
+    # cam_xyz = np.vstack([cam_xyz, np.ones(cam_xyz.shape[1])])
+
     # Get pixel coordinates of X, Y, Z points in camera coordinate frame
     projection = P.dot(cam_xyz)
-    # projection = (projection / projection[2])
-    return projection, depth
+    # projection = projection / projection[2]
+
+    return projection # , depth
 
 def proj_pixel_coordinates(projection, img_w, img_h):
     # Turn pixels into integers for indexing
@@ -96,7 +124,7 @@ def pointcloud2image(pc, Tr, P, img_w, img_h):
     return pc
 
 
-if __name__ == '__main__':
+def test_rigid_transform():
     R = np.mat(np.random.rand(3,3))
     t = np.mat(np.random.rand(3,1))
 
@@ -146,3 +174,25 @@ if __name__ == '__main__':
     
     from .plots import compare_pc 
     compare_pc(A, B, A2)
+
+if __name__ == '__main__':
+    # test_rigid_transform()
+    from dataset import KittiDataset 
+    from plots import compare_pc
+
+    dataset = KittiDataset(
+        root="../../", 
+        mode='train', 
+        num_pc=4096, 
+        img_width=256, 
+        img_height=256
+    )
+    pc, img = dataset[0]
+    pc, colors = np.hsplit(pc, 2)
+    neighbors_indices = points_in_radius(pc)
+    print(neighbors_indices.shape)
+
+    for i, indices in enumerate(neighbors_indices):
+        center = pc[i]
+        neighbors = pc[indices]
+        compare_pc( pc, neighbors, np.array([center]) )

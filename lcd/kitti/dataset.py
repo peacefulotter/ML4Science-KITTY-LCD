@@ -1,12 +1,11 @@
 
 import os
 import numpy as np
+import open3d as o3d
 import torch.utils.data as data
 
-from .calib import import_calib
-from .plots import plot_pc
-
-import open3d as o3d
+import calib
+import plots
 
 # TODO: ImageFolder dataset
 class KittiDataset(data.Dataset):
@@ -18,7 +17,7 @@ class KittiDataset(data.Dataset):
         self.img_w = img_width
         self.img_h = img_height
         self.dataset = self.make_kitti_dataset()
-        self.calib = import_calib(root)
+        self.calib = calib.import_calib(root)
 
     def get_dataset_folder(self, seq, name):
         return os.path.join(self.root, 'sequences', '%02d' % seq, name)
@@ -69,7 +68,6 @@ class KittiDataset(data.Dataset):
     def display_points_in_image(self, depth_mask, in_frame_mask, pc):
         total_mask = self.combine_masks(depth_mask, in_frame_mask)
         colors = np.zeros(pc.shape)
-        print(colors.shape)
         colors[1, total_mask] = 190/255 # highlight selected points in green
         colors[2, ~total_mask] = 120/255 # highlight unselected points in blue
         plots.plot_pc(pc.T, colors.T)
@@ -87,7 +85,10 @@ class KittiDataset(data.Dataset):
     def voxel_down_sample(self, pc, intensity, sn, colors, voxel_grid_size=.1):
         # TODO: use intensity?
         max_intensity = np.max(intensity)
-        # colors = colors * intensity / max_intensity   
+        # colors = intensity / max_intensity   # colors * 
+
+        # colors=np.zeros((pc.shape[0],3))
+        # colors[:,0:1]= intensity /max_intensity
 
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(pc)
@@ -115,22 +116,36 @@ class KittiDataset(data.Dataset):
             choice_idx = np.concatenate((fix_idx, random_idx), axis=0)
         return pc[choice_idx], colors[choice_idx]
 
+    def get_anchors(self, centers):
+        '''
+        params:
+            centers = (nb_points, 3) - projected points on the image
+            img = (W, H) pixels
+
+        returns:
+            Image anchor (origin_x, origin_y) for each center
+            s_imgs = (nb_points, 2)
+        '''
+        anchors = np.zeros((centers.shape[0], 2))
+        for i, center in enumerate(centers):
+            x, y = center[0], center[1]
+            anchors[i, 0] = max(0, x - self.img_w)
+            anchors[i, 1] = max(0, y - self.img_h)
+        return anchors
+
     def __getitem__(self, index):
         img_folder, pc_folder, K_folder, seq, seq_i, key, _ = self.dataset[index]
         img, pc, intensity, sn, K = self.load_item(img_folder, pc_folder, K_folder, seq_i)
 
         # Take random part of the image of size (img_w, img_h)
-        img, dx, dy = self.crop_img(img)
+        # img, dx, dy = self.crop_img(img)
 
         # Project point cloud to image
         Pi = self.calib[seq][key] # (3, 4)
         Tr = self.calib[seq]['Tr'] # (4, 4)
+        P_Tr = np.matmul(Pi, Tr)
 
-        Pi_ext = np.row_stack((Pi, [0, 0, 0, 1]))
-        Tr_ext = np.row_stack((Tr, [0, 0, 0, 1]))
-        P_Tr = np.matmul(Pi_ext, Tr_ext)
-
-        pts_ext = np.row_stack((pc, np.ones((pc.shape[1],))))
+        pts_ext = np.r_[ pc, np.ones((1,pc.shape[1])) ]
         pts_cam = (P_Tr @ pts_ext)[:3, :]
         pts_cam_T = pts_cam.T
 
@@ -155,10 +170,11 @@ class KittiDataset(data.Dataset):
             K_scale[2, 2] = 1
             return K_scale
 
-        # K = np.eye(3)
+        # TODO better K
+        K = np.eye(3) * 1/100
         # TODO: playing around with this value changes the pc
-        K = camera_matrix_scaling(K, 1 / 1000)  # the 1/4 is the number I saw in CorrI2P
-        K = camera_matrix_cropping(K, dx=dx, dy=dy)
+        # K = camera_matrix_scaling(K, 1/4)  # the 1/4 is the number I saw in CorrI2P
+        # K = camera_matrix_cropping(K, dx=dx, dy=dy)
 
         pts_front_cam = (K @ pts_front_cam.T).T
 
@@ -190,29 +206,63 @@ class KittiDataset(data.Dataset):
 
         # TODO: delete (retries when no points)
         if pc_space.shape[0] == 0:
+            print('No points projected, retrying..')
             return self.__getitem__(index)
 
-        # Downsample pointcloud
-        pc_space, colors, sn = self.voxel_down_sample(pc_space, intensity_in_frame, sn_in_frame, colors)
-        pc_space, colors = self.downsample_np(pc_space, colors)
-        pc_space = np.c_[ pc_space, colors ]
+        # pc_space, colors, sn = self.voxel_down_sample(pc_space, intensity_in_frame, sn_in_frame, colors)
 
+        anchors = self.get_anchors(pts_in_frame)
+        print(pts_in_frame.shape, anchors.shape)
+        
+        from pointcloud import points_in_radius
+        neighbors_indices = points_in_radius(pc_space)
+        print(pc_space.shape, neighbors_indices.shape)
+        
+        # Downsample pointcloud
+        # pc_space, colors = self.downsample_np(pc_space, colors)
+        pc_space = np.c_[ pc_space, colors ]
+        
         return pc_space, img
 
 
 if __name__ == '__main__':
+
+    import sys
+    sys.path.append('../')
+    from models.patchnet import PatchNetAutoencoder
+    from models.pointnet import PointNetAutoencoder
+    
     # idx = 50
     # w, h = 256, 128
-    w, h = 64, 64
-    for p in range(5):
-        num_pc = pow(2, p + 12)
-        dataset = KittiDataset(
-            root="./", 
-            mode='train', 
-            num_pc=num_pc, 
-            img_width=w, 
-            img_height=h
-        )
-        pc, img = dataset[0]
-        pc, colors = np.hsplit(pc, 2)
-        plots.plot_pc(pc, colors)
+    # w, h = 64, 64
+    w, h = 1225, 319
+    num_pc = pow(2,  14)
+    dataset = KittiDataset(
+        root="../../", 
+        mode='train', 
+        num_pc=num_pc, 
+        img_width=w, 
+        img_height=h
+    )
+    pc, img = dataset[199]
+    pc, colors = np.hsplit(pc, 2)
+    plots.plot_pc(pc, colors)
+
+    loader = data.DataLoader(
+        dataset,
+        batch_size=2,
+        num_workers=1,
+        pin_memory=True,
+        shuffle=True,
+    )
+    patchnet = PatchNetAutoencoder(256, True)
+    pointnet = PointNetAutoencoder(256,3,6,True)
+
+    for i, batch in enumerate(loader):
+        x = [x.to('cpu') for x in batch]
+        for b in batch:
+            print(b.shape)
+        y0, z0 = pointnet(x[0])
+        y1, z1 = patchnet(x[1])
+        print(y0.shape, z0.shape)
+        print(y1.shape, z1.shape)

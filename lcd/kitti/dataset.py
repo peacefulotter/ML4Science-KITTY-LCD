@@ -129,8 +129,8 @@ class KittiDataset(data.Dataset):
         anchors = np.zeros((centers.shape[0], 2))
         for i, center in enumerate(centers):
             x, y = center[0], center[1]
-            anchors[i, 0] = max(0, x - self.img_w)
-            anchors[i, 1] = max(0, y - self.img_h)
+            anchors[i, 0] = max(0, x - self.img_w / 2)
+            anchors[i, 1] = max(0, y - self.img_h / 2)
         return anchors
 
     def __getitem__(self, index):
@@ -213,7 +213,7 @@ class KittiDataset(data.Dataset):
 
         anchors = self.get_anchors(pts_in_frame)
         print(pts_in_frame.shape, anchors.shape)
-        
+
         from pointcloud import points_in_radius
         neighbors_indices = points_in_radius(pc_space)
         print(pc_space.shape, neighbors_indices.shape)

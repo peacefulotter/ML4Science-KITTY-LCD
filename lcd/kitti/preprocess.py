@@ -9,9 +9,8 @@ import calib
 import plots
 
 # TODO: ImageFolder dataset
-class KittiDataset(data.Dataset):
-    def __init__(self, root, mode, img_width=64, img_height=64, num_pc=4096, min_pc=128, *args, **kwargs):
-        super(KittiDataset, self).__init__(*args, **kwargs)
+class KittiPreprocess:
+    def __init__(self, root, mode, img_width=64, img_height=64, num_pc=4096, min_pc=128):
         self.root = root
         self.mode = mode
         self.img_w = img_width
@@ -118,22 +117,39 @@ class KittiDataset(data.Dataset):
             choice_idx = np.concatenate((fix_idx, random_idx), axis=0)
         return pc[choice_idx], colors[choice_idx]
 
-    def get_anchors(self, centers):
+    def get_cropped_img(self, center, img):
         '''
         params:
-            centers = (nb_points, 3) - projected points on the image
-            img = (W, H) pixels
-
+            center = (1, 3) - point that can be projected on the image
+            img = (H, W, 3) array of rgb values
         returns:
-            Image anchor (origin_x, origin_y) for each center
-            s_imgs = (nb_points, 2)
+            cropped_img = (self.img_h, self.img_w)
         '''
-        anchors = np.zeros((centers.shape[0], 2))
-        for i, center in enumerate(centers):
-            x, y = center[0], center[1]
-            anchors[i, 0] = max(0, x - self.img_w / 2)
-            anchors[i, 1] = max(0, y - self.img_h / 2)
-        return anchors
+        x, y = center[0], center[1]
+        o_x = max(0, x - self.img_w / 2)
+        o_y = max(0, y - self.img_h / 2)
+        return img[o_y : o_y + self.img_h, o_x : o_x + self.img_w]
+
+    def store_result(self, seq_i, img_i, pc_in_frame, colors, img, centers, neighbors_indices):
+
+        assert centers.shape[0] == neighbors_indices.shape[0]
+
+        for i, indices in enumerate(neighbors_indices):
+            center = centers[i]
+            center_pc = pc_in_frame[indices]
+            center_rgb = colors[indices]
+            center_rgb_pc = np.c_[ center_pc, center_rgb ]
+            cropped_img = self.get_cropped_img(center, img)
+
+            path = f'../../kitti_data/{seq_i}/{img_i}/{i}.npz'
+            print('Storing at', path, 'rgb_pc:', center_rgb_pc.shape, ', img:', cropped_img.shape)
+            plots.compare_pc_with_colors(
+                pc_in_frame, colors, 
+                center_pc, 'red', 
+                np.array([center]), 'green'
+            )
+            np.savez(path, center=center, pc=center_rgb_pc, img=cropped_img)
+
 
     def __getitem__(self, index):
         img_folder, pc_folder, K_folder, seq, seq_i, key, _ = self.dataset[index]
@@ -193,43 +209,34 @@ class KittiDataset(data.Dataset):
 
         # Get the pointcloud in its original space
         total_mask = self.combine_masks(depth_mask, in_image_mask)
-        pc_space = pc.T[total_mask]
+        pc_in_frame = pc.T[total_mask]
 
         # TODO: delete (retries when no points)
-        if pc_space.shape[0] == 0:
+        if pc_in_frame.shape[0] == 0:
             print('Not enough points projected, retrying')
             return self.__getitem__(index)
 
-        anchors = self.get_anchors(pts_in_frame)
-        print("anchors: ", pts_in_frame.shape, anchors.shape)
-
-        ds_pc_space, ds_colors, ds_sn = self.voxel_down_sample(pc_space, intensity_in_frame, sn_in_frame, colors)
+        # Voxel Downsample pointcloud
+        ds_pc_space, ds_colors, ds_sn = self.voxel_down_sample(pc_in_frame, intensity_in_frame, sn_in_frame, colors)
         # ds_pc_space, ds_colors = self.downsample_np(ds_pc_space, ds_colors)
-        print("downsample: ", pc_space.shape, ds_pc_space.shape)
+        print("downsample: ", pc_in_frame.shape, ds_pc_space.shape)
         
-        neighbors_indices = downsample_neighbors(ds_pc_space, pc_space, self.min_pc)
-        print("neghbors: ", pc_space.shape, neighbors_indices.shape)
+        # Find neighbors for each point
+        # TODO: debug only
+        ds_pc_space = ds_pc_space[:10]
+        neighbors_indices, centers = downsample_neighbors(ds_pc_space, pc_in_frame, self.min_pc)
+        print("neighbors: ", pc_in_frame.shape, neighbors_indices.shape, centers.shape)
         print(neighbors_indices)
 
-        # Downsample pointcloud
-        pc_space = np.c_[ pc_space, colors ]
-
-        return pc_space, img
+        self.store_result(seq, seq_i, pc_in_frame, colors, img, centers, neighbors_indices)
 
 
 if __name__ == '__main__':
 
-    import sys
-    sys.path.append('../')
-    from models.patchnet import PatchNetAutoencoder
-    from models.pointnet import PointNetAutoencoder
-
-    # idx = 50
-    # w, h = 256, 128
     w, h = 64, 64
-    num_pc = pow(2,  14)
+    num_pc = pow(2,  10)
     min_pc = 32
-    dataset = KittiDataset(
+    dataset = KittiPreprocess(
         root="../../",
         mode='train',
         img_width=w,
@@ -237,27 +244,6 @@ if __name__ == '__main__':
         num_pc=num_pc,
         min_pc=min_pc
     )
-    """pc, img = dataset[199]
-    pc, colors = np.hsplit(pc, 2)
-    plots.plot_pc(pc, colors)"""
 
-    loader = data.DataLoader(
-        dataset,
-        batch_size=2,
-        num_workers=1,
-        pin_memory=True,
-        shuffle=True,
-    )
-    patchnet = PatchNetAutoencoder(256, True)
-    pointnet = PointNetAutoencoder(256,3,6,True)
-
-    for i, batch in enumerate(loader):
-        x = [x.to('cpu') for x in batch]
-        for b in batch:
-            print(b.shape)
-            print(b)
-            print('--------')
-        y0, z0 = pointnet(x[0])
-        y1, z1 = patchnet(x[1])
-        print(y0.shape, z0.shape)
-        print(y1.shape, z1.shape)
+    for i in range(10):
+        dataset[i]

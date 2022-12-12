@@ -12,17 +12,35 @@ colors = [
     [0.2, 0.8, 0.3]
 ]
 
+colors_name = [
+    'blue',
+    'red',
+    'green'
+]
+
+def get_pc(pc, color_i):
+    _pc = o3d.geometry.PointCloud()
+    _pc.points = o3d.utility.Vector3dVector(pc)
+    _pc.paint_uniform_color(colors[color_i])
+    return _pc
+
+def get_pc_with_color(pc, color):
+    if color in colors_name:
+        return get_pc(pc, colors_name.index(color))
+    _pc = o3d.geometry.PointCloud()
+    _pc.points = o3d.utility.Vector3dVector(pc)
+    _pc.colors = o3d.utility.Vector3dVector(color)
+    return _pc
+
+def compare_pc_with_colors(*pcs):
+    assert len([pc for pc in pcs if pc in colors_name or pc.shape[1] == 3]) == len(pcs)
+    o3d.visualization.draw_geometries([
+        get_pc_with_color(pcs[i], pcs[i + 1]) for i in range(0, len(pcs), 2)
+    ])
 def compare_pc(*pcs):
     assert len([pc for pc in pcs if pc.shape[1] != 3]) == 0
-
-    def get_pc(pc, color):
-        _pc = o3d.geometry.PointCloud()
-        _pc.points = o3d.utility.Vector3dVector(pc)
-        _pc.paint_uniform_color(color)
-        return _pc
-
     o3d.visualization.draw_geometries([
-        get_pc(pc, colors[i]) for i, pc in enumerate(pcs)
+        get_pc(pc, i) for i, pc in enumerate(pcs)
     ])
 
 def plot_pc(pc, colors=None):

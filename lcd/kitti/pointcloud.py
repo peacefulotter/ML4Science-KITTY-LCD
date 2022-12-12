@@ -25,13 +25,10 @@ def rigid_transform_3D(A, B):
        print("Reflection detected")
        Vt[2,:] *= -1
        R = Vt.T * U.T
-
     t = -R * centroid_A.T + centroid_B.T
-
     return R, t
 
-
-def downsample(arr, num):
+def downsample_arr(arr, num):
     nb_points = arr.shape[0]
     if nb_points >= num:
         choice_idx = np.random.choice(nb_points, num, replace=False)
@@ -44,17 +41,37 @@ def downsample(arr, num):
     return arr[choice_idx]
 
 
-def points_in_radius(pc, radius=1, num=1024):
-    print('Computing KDTree query_ball_point for', pc.shape[0], 'points')
+"""
+Uses all the points for finding neighbors
+but compute the query_ball_point only for the voxel downsampled points
+this reduces computation (on less points) while keeping
+the "important" points 
+"""
+def downsample_neighbors(ds_pc, pc, min_neighbors, radius=1, downsample=1024):
+    '''
+    ds_pc: voxel downsampled pointcloud
+    pc: poincloud that projected onto the image
+    min_neighbors: minimum amount of neighbors to keep the point
+    radius: ???
+    downsample: downsamples the neighbors to be this amount (duplicate)
+    '''
+    print('Computing KDTree query_ball_point for', ds_pc.shape[0], 'points with', pc.shape[0], 'total points')
     import scipy.spatial as spatial
     tree = spatial.KDTree(pc)
-    ball_points = tree.query_ball_point(pc, r=radius)
-    neighbors = np.zeros((pc.shape[0], num))
+    ball_points = tree.query_ball_point(ds_pc, r=radius)
+    neighbors = np.zeros((pc.shape[0], downsample), dtype=int)
+    centers = np.zeros((pc.shape[0], 3))
+    count = 0
     for i, indices in enumerate(ball_points):
         indices = np.array(indices)
-        downsample_indices = downsample(indices, num=num)
-        neighbors[i] = downsample_indices
-    return neighbors
+        if indices.shape[0] < min_neighbors:
+            continue
+        downsample_indices = downsample_arr(indices, num=downsample)
+        neighbors[count] = downsample_indices
+        centers[count] = ds_pc[i]
+        count += 1
+    print('Found neighbors for', count, 'points')
+    return neighbors[:count, :], centers[:count]
 
 
 
@@ -189,7 +206,7 @@ if __name__ == '__main__':
     )
     pc, img = dataset[0]
     pc, colors = np.hsplit(pc, 2)
-    neighbors_indices = points_in_radius(pc)
+    neighbors_indices = downsample_neighbors(pc)
     print(neighbors_indices.shape)
 
     for i, indices in enumerate(neighbors_indices):

@@ -1,4 +1,5 @@
 __pycache__/
 sequences/
 calib/
+lcd/kitti/kitti_data
 *.h5

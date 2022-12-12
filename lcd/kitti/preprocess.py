@@ -134,6 +134,7 @@ class KittiPreprocess:
 
         assert centers.shape[0] == neighbors_indices.shape[0]
 
+        root = os.path.join(self.root, 'lcd', 'kitti')
         for i, indices in enumerate(neighbors_indices):
             center = centers[i]
             center_pc = pc_in_frame[indices]
@@ -141,14 +142,22 @@ class KittiPreprocess:
             center_rgb_pc = np.c_[ center_pc, center_rgb ]
             cropped_img = self.get_cropped_img(center, img)
 
-            path = f'../../kitti_data/{seq_i}/{img_i}/{i}.npz'
+            self.make_nested_folders(root, ['kitti_data', str(seq_i), str(img_i)])
+            path = os.path.join(root, 'kitti_data', str(seq_i), str(img_i), f'{i}.npz')
             print('Storing at', path, 'rgb_pc:', center_rgb_pc.shape, ', img:', cropped_img.shape)
             plots.compare_pc_with_colors(
-                pc_in_frame, colors, 
-                center_pc, 'red', 
+                pc_in_frame, colors,
+                center_pc, 'red',
                 np.array([center]), 'green'
             )
             np.savez(path, center=center, pc=center_rgb_pc, img=cropped_img)
+
+    def make_nested_folders(self, root, folders):
+        for folder in folders:
+            root = os.path.join(root, folder)
+            if not (os.path.exists(root)):
+                os.mkdir(root)
+
 
 
     def __getitem__(self, index):
@@ -220,7 +229,7 @@ class KittiPreprocess:
         ds_pc_space, ds_colors, ds_sn = self.voxel_down_sample(pc_in_frame, intensity_in_frame, sn_in_frame, colors)
         # ds_pc_space, ds_colors = self.downsample_np(ds_pc_space, ds_colors)
         print("downsample: ", pc_in_frame.shape, ds_pc_space.shape)
-        
+
         # Find neighbors for each point
         # TODO: debug only
         ds_pc_space = ds_pc_space[:10]
@@ -236,8 +245,9 @@ if __name__ == '__main__':
     w, h = 64, 64
     num_pc = pow(2,  10)
     min_pc = 32
+    root = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', '..')
     dataset = KittiPreprocess(
-        root="../../",
+        root=root,
         mode='train',
         img_width=w,
         img_height=h,

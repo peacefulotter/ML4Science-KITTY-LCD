@@ -15,7 +15,7 @@ from lcd.losses import *
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--config", help="path to the json config file", default="config.json")
+parser.add_argument("--config", help="path to the json config file", default="./config.json")
 parser.add_argument("--logdir", help="path to the log directory", default="./logs/LCD")
 args = parser.parse_args()
 
@@ -75,6 +75,7 @@ for epoch in range(args["epochs"]):
 
     for i, batch in enumerate(loader):
         x = [x.to(device) for x in batch]
+        print(x[0].shape, x[1].shape)
         y0, z0 = pointnet(x[0])
         y1, z1 = patchnet(x[1])
 

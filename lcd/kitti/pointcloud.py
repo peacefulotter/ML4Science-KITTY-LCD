@@ -1,5 +1,7 @@
 import numpy as np
 
+from loguru import logger
+
 
 def rigid_transform_3D(A, B):
     assert len(A) == len(B)
@@ -52,10 +54,10 @@ def downsample_neighbors(ds_pc, pc, min_neighbors, radius=1, downsample=1024):
     ds_pc: voxel downsampled pointcloud
     pc: poincloud that projected onto the image
     min_neighbors: minimum amount of neighbors to keep the point
-    radius: ???
+    radius: radius of points to return, in meters
     downsample: downsamples the neighbors to be this amount (duplicate)
     '''
-    print('Computing KDTree query_ball_point for', ds_pc.shape[0], 'points with', pc.shape[0], 'total points')
+    logger.info(f'Computing KDTree query_ball_point for {ds_pc.shape[0]} points with {pc.shape[0]} total points')
     import scipy.spatial as spatial
     tree = spatial.KDTree(pc)
     ball_points = tree.query_ball_point(ds_pc, r=radius)
@@ -67,12 +69,11 @@ def downsample_neighbors(ds_pc, pc, min_neighbors, radius=1, downsample=1024):
         if indices.shape[0] < min_neighbors:
             continue
         # Add the center point to neighbors
-        indices = np.append(indices, i)
         downsample_indices = downsample_arr(indices, num=downsample)
         neighbors[count] = downsample_indices
         centers[count] = ds_pc[i]
         count += 1
-    print('Found neighbors for', count, 'points')
+    logger.info(f'Found neighbors for {count} points')
     return neighbors[:count, :], centers[:count]
 
 

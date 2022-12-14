@@ -39,9 +39,16 @@ class KittiPreprocess:
         return os.path.join(self.root, 'sequences', '%02d' % seq, name)
 
     def make_kitti_dataset(self):
+        '''
+        Returns:
+            Array where each element follows the following format:
+            img_folder, pc_folder, K_folder, # data folders
+            seq_i, img_i, # ith sequence and ith image
+            key, # key=(P2 or P3)
+        '''
         dataset = []
         seq_list = KittiPreprocess.SEQ_LISTS[self.mode]
-        logger.debug(f'Loading {seq_list} sequences')
+        logger.info(f'Loading {seq_list} sequences')
         for seq_i in seq_list:
             img2_folder = self.get_dataset_folder(seq_i, 'img_P2')
             img3_folder = self.get_dataset_folder(seq_i, 'img_P3')
@@ -135,8 +142,9 @@ class KittiPreprocess:
             cropped_img = (self.img_h, self.img_w)
         '''
         x, y = center[0], center[1]
-        o_x = max(0, x - self.img_w / 2)
-        o_y = max(0, y - self.img_h / 2)
+        o_x = max(0, int(x - self.img_w / 2))
+        o_y = max(0, int(y - self.img_h / 2))
+        # TODO: neighbors radius should be similar to cropped img w and h ??
         return img[o_y : o_y + self.img_h, o_x : o_x + self.img_w]
 
     @staticmethod
@@ -156,66 +164,66 @@ class KittiPreprocess:
         )
 
     @staticmethod
-    def load_data(img_folder, i):
+    def load_data(img_folder, sample):
         '''
         img_folder: using KittiPreprocess.resolve_img_folder
-        i: ith sample
+        sample: ith sample
         '''
-        path = KittiPreprocess.resolve_data_path(img_folder, i)
+        path = KittiPreprocess.resolve_data_path(img_folder, sample)
         data = np.load(path)
-        return data['pc'], data['img']
+        return data['pc'], data['img'], data['Pi']
 
-    def save_data(self, img_folder, i, pc, img):
+    def save_data(self, img_folder, i, pc, img, Pi):
         path = KittiPreprocess.resolve_data_path(img_folder, i)
         logger.info(f'Storing at {path}  - rgb_pc: {pc.shape}, img: {img.shape}')
-        np.savez(path, pc=pc, img=img)
+        np.savez(path, pc=pc, img=img, Pi=Pi)
 
 
-    def get_samples(self, seq_i, img_i):
-        img_folder = KittiPreprocess.resolve_img_folder(self.root, seq_i, img_i)
+    def get_samples(self, img_folder):
         samples = 0
         if os.path.exists(img_folder):
             samples = round(len(os.listdir(img_folder))) 
-        return img_folder, samples
+        return samples
 
-    def store_result(self, seq_i, img_i, pc_in_frame, colors, centers, img, neighbors_indices):
+    def store_result(self, seq_i, img_i, pc_in_frame, colors, centers_2D, img, neighbors_indices, Pi):
 
-        assert centers.shape[0] == neighbors_indices.shape[0]
-
+        assert centers_2D.shape[0] == neighbors_indices.shape[0]
+        
+        img_folder = KittiPreprocess.resolve_img_folder(self.root, seq_i, img_i)
         # nb of samples already preprocessed for this sequence and this image
-        img_folder, samples = self.get_samples(seq_i, img_i) 
+        samples = self.get_samples(img_folder) 
 
-        # root = os.path.join(self.root, 'lcd', 'kitti')
         for i, indices in enumerate(neighbors_indices):
-            center = centers[i]
+            center = centers_2D[i]
             neighbors_pc = pc_in_frame[indices]
             neighbors_rgb = colors[indices]
             neighbors_rgb_pc = np.c_[ neighbors_pc, neighbors_rgb ]
             cropped_img = self.get_cropped_img(center, img)
+            self.make_nested_folders([str(seq_i), str(img_i)])
+            self.save_data(img_folder, samples + i, neighbors_rgb_pc, cropped_img, Pi)
 
-            self.make_nested_folders(root, [KittiPreprocess.KITTI_DATA_FOLDER, str(seq_i), str(img_i)])
-            self.save_data(img_folder, samples + i + 1, neighbors_rgb_pc, cropped_img)
-
-    def make_nested_folders(self, root, folders):
+    def make_nested_folders(self, folders):
+        folders.insert(0, KittiPreprocess.KITTI_DATA_FOLDER)
+        root = self.root
         for folder in folders:
             root = os.path.join(root, folder)
-            print(root)
             if not (os.path.exists(root)):
                 os.mkdir(root)
+        return root
 
-    def __getitem__(self, index):
-        (
-            img_folder, pc_folder, K_folder, # data folders
-            seq_i, img_i, # ith sequence and ith image
-            key, # key=(P2 or P3)
-        ) = self.dataset[index]
-        img, pc, intensity, sn, K = self.load_item(img_folder, pc_folder, K_folder, img_i)
+    def save_calib_files(self):
+        for seq_i, seq_calib in enumerate(self.calib):
+            path = self.make_nested_folders([str(seq_i)])
+            res = {}
+            for key, mat in seq_calib.items():
+                if key == 'P2' or key == 'P3':
+                    res[key] = mat
+            path = path + '/calib'
+            logger.info(f"Saving calib file {seq_i} to {path}")
+            np.savez(path, P2=res['P2'], P3=res['P3'])
 
-        logger.info(f'{seq_i}, {img_i}, {key}')
 
-        # Take random part of the image of size (img_w, img_h)
-        # img, dx, dy = self.crop_img(img)
-
+    def get_pc_in_frame(self, pc, img, seq_i, key, K):
         # Project point cloud to image
         Pi = self.calib[seq_i][key] # (3, 4)
         Tr = self.calib[seq_i]['Tr'] # (4, 4)
@@ -231,10 +239,8 @@ class KittiPreprocess:
         # discard the points behind the camera (of negative depth) -- these points get flipped during the z_projection
         depth_mask = ~(depth < 0.1)
         pts_front_cam = pts_cam[depth_mask]
-        intensity_front_cam = intensity.T[depth_mask]
-        sn_front_cam = sn.T[depth_mask]
 
-        # TODO better K
+        # TODO better K - use the real one
         K = np.eye(3) * 1 / 100
         # TODO: playing around with this value changes the pc
         # K = camera_matrix_scaling(K, 1/4)  # the 1/4 is the number I saw in CorrI2P
@@ -257,17 +263,30 @@ class KittiPreprocess:
             (pts_on_camera_plane[:, 1] < img.shape[0])
         )
         pts_in_frame = pts_on_camera_plane[in_image_mask]
-        intensity_in_frame = intensity_front_cam[in_image_mask]
-        sn_in_frame = sn_front_cam[in_image_mask]
+
+        return pts_in_frame, depth_mask, in_image_mask
+
+    def full_projection(self, pc, intensity, sn, img, seq_i, key, K):
+        
+        pts_in_frame, depth_mask, in_image_mask = self.get_pc_in_frame(pc, img, seq_i, key, K)
 
         # TODO: add some noise to the color_mask
         color_mask = np.floor(pts_in_frame).astype(int)
-        colors = img[ color_mask[:, 1], color_mask[:, 0] ] / 255 # (M, 3) RGB per point
+        projected_colors = img[ color_mask[:, 1], color_mask[:, 0] ] / 255 # (M, 3) RGB per point
         #pts_in_frame = pts_in_frame*z[in_image_mask]
 
         # Get the pointcloud in its original space
         total_mask = self.combine_masks(depth_mask, in_image_mask)
         pc_in_frame = pc.T[total_mask]
+        intensity_in_frame = intensity.T[total_mask]
+        sn_in_frame = sn.T[total_mask]
+
+        return pc_in_frame, intensity_in_frame, sn_in_frame, projected_colors
+
+    def __getitem__(self, index):
+        img_folder, pc_folder, K_folder, seq_i, img_i, key = self.dataset[index]
+        img, pc, intensity, sn, K = self.load_item(img_folder, pc_folder, K_folder, img_i)
+        pc_in_frame, intensity_in_frame, sn_in_frame, projected_colors = self.full_projection(pc, intensity, sn, img, seq_i, key, K)
 
         # TODO: delete? (retries when no points)
         if pc_in_frame.shape[0] == 0:
@@ -275,17 +294,20 @@ class KittiPreprocess:
             return self.__getitem__(index)
 
         # Voxel Downsample pointcloud
-        ds_pc_space, ds_colors, ds_sn = self.voxel_down_sample(pc_in_frame, intensity_in_frame, sn_in_frame, colors)
-        # ds_pc_space, ds_colors = self.downsample_np(ds_pc_space, ds_colors)
-        logger.info(f'[Downsample] original: {pc_in_frame.shape}, downsampled: {ds_pc_space.shape}')
+        ds_pc, ds_colors, ds_sn = self.voxel_down_sample(pc_in_frame, intensity_in_frame, sn_in_frame, projected_colors)
+        # ds_pc_space, ds_colors = self.downsample_np(ds_pc, ds_colors)
+        logger.info(f'[Downsample] original: {pc_in_frame.shape}, downsampled: {ds_pc.shape}')
 
         # Find neighbors for each point
-        # TODO: debug only
-        ds_pc_space = ds_pc_space[:10]
-        neighbors_indices, centers = downsample_neighbors(ds_pc_space, pc_in_frame, self.min_pc)
+        # TODO: remove [:10]
+        # TODO: downsample to remove points that are close even further (i.e. increase voxel_grid_size)
+        neighbors_indices, centers_3D  = downsample_neighbors(ds_pc[:10], pc_in_frame, self.min_pc)
         logger.info(f'[Neighbors] original: {pc_in_frame.shape}, {neighbors_indices.shape}')
+        
+        centers_2D, _, _ = self.get_pc_in_frame(centers_3D.T, img, seq_i, key, K)
+        centers_2D = np.floor(centers_2D).astype(int)
 
-        self.store_result(seq_i, img_i, pc_in_frame, colors, centers, img, neighbors_indices)
+        self.store_result(seq_i, img_i, pc_in_frame, projected_colors, centers_2D, img, neighbors_indices, Pi=key)
 
 
 if __name__ == '__main__':
@@ -294,18 +316,28 @@ if __name__ == '__main__':
     num_pc = pow(2,  10)
     min_pc = 32
     root = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', '..')
-    print('root:', root)
-    dataset = KittiPreprocess(
+    logger.info(f'Loading from root: {root}')
+    preprocess = KittiPreprocess(
         root=root,
         mode='debug', # TODO: change this to "all"
         img_width=w,
         img_height=h,
         num_pc=num_pc,
         min_pc=min_pc
-    )
+    )    
 
-    for i in range(15):
-        dataset[i]
+    # Save preprocessed calib files    
+    # preprocess.save_calib_files()
 
-    pc, img = KittiPreprocess.load_data(seq_i=0, img_i=10, i=5)
-    plots.plot_rgb_pc(pc)
+    # Used to preprocess the kitti data and save it to the KittiPreprocess.KITTI_DATA_FOLDER
+    # for i in range(15):
+    #    preprocess[i]
+
+    seq_i = 0
+    img_i = 2
+    samples = 20
+    img_folder = preprocess.resolve_img_folder(root, seq_i, img_i)
+    for sample in range(samples):
+        pc, img, Pi = preprocess.load_data(img_folder, sample)
+        logger.success(f'sample: {sample} {pc.shape}, {img.shape}, {Pi}')
+        # plots.plot_rgb_pc(pc)

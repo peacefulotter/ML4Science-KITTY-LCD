@@ -73,26 +73,25 @@ def get_img_xy_pc(pc, img_feature, pc_feature, img_score, pc_score, *args):
 
     return pc_sel, img_xy_pc
 
-def get_P_pred(pc_sel, img_xy_pc, K, *args):
+def get_pose(pc, img, K, dist_thres=1):
     _, R, t, _ = cv2.solvePnPRansac(
-        pc_sel.T, img_xy_pc.T, K, useExtrinsicGuess=False,
-        iterationsCount=500, reprojectionError=args.dist_thres, 
+        pc.T, img.T, K, useExtrinsicGuess=False,
+        iterationsCount=500, reprojectionError=dist_thres, 
         flags=cv2.SOLVEPNP_EPNP, distCoeffs=None
     )
     R, _ = cv2.Rodrigues(R)
     
-    P_pred = np.eye(4)
-    P_pred[:3, :3] = R
-    P_pred[:3, 3:] = t
-
-    return P_pred
+    pose = np.eye(4)
+    pose[:3, :3] = R
+    pose[:3, 3:] = t
+    return pose
 
 # Relative Translational Error (RTE)
 # Relative Rotational Error (RRE)
 # K: cam intrinsic?
 def relative_error(pc, img_feature, pc_feature, img_score, pc_score, P_gr, K, *args):
     pc_sel, img_xy_pc = get_img_xy_pc(pc, img_feature, pc_feature, img_score, pc_score, *args)
-    P_pred = get_P_pred(pc_sel, img_xy_pc, K, *args)
+    P_pred = get_pose(pc_sel, img_xy_pc, K, args.dist_thres)
     
     P_diff = np.linalg.inv(P_pred) @ P_gr
     rte = np.linalg.norm(P_diff[0:3, 3])

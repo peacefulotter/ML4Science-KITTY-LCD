@@ -31,15 +31,23 @@ def read_calib_line(calib, line):
     key, mat = extract_key_mat(line)
     calib[key] = get_tr(mat) if key == 'Tr' else get_p(mat)
 
-def import_calib(path):
+def read_calib_files(path, cb):
     seq_folders = [
         name for name in os.listdir(
         os.path.join(path, 'calib'))
     ]
-    calib = [{} for i in range(len(seq_folders))]
     for seq in seq_folders:
         file_path = os.path.join(path, 'calib', seq, 'calib.txt')
         with open(file_path, 'r') as f:
             for line in f.readlines():
-                read_calib_line(calib[int(seq)], line)
+                cb(seq, line)
+
+def import_calib(path):
+    calib = []
+    def callback(seq, line):
+        seq = int(seq)
+        while len(calib) <= seq:
+            calib.append({})
+        read_calib_line(calib[seq], line)
+    read_calib_files(path, callback)
     return calib

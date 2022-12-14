@@ -94,6 +94,7 @@ class KittiPreprocess:
                 idx_in_frame += 1
         return mask.astype(bool)
 
+    # voxel_grid_size not to lose too much info up
     def voxel_down_sample(self, pc, intensity, sn, colors, voxel_grid_size=.1):
         # TODO: use intensity?
         max_intensity = np.max(intensity)
@@ -293,7 +294,6 @@ class KittiPreprocess:
 
         print(pts_in_frame)
         print(pts_in_frame[pts_in_frame < 0])
-
 
         color_mask = np.floor(pts_in_frame_offset).astype(int)
         projected_colors = img[ color_mask[:, 1], color_mask[:, 0] ] / 255 # (M, 3) RGB per point

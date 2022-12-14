@@ -66,6 +66,8 @@ def downsample_neighbors(ds_pc, pc, min_neighbors, radius=1, downsample=1024):
         indices = np.array(indices)
         if indices.shape[0] < min_neighbors:
             continue
+        # Add the center point to neighbors
+        indices = np.append(indices, i)
         downsample_indices = downsample_arr(indices, num=downsample)
         neighbors[count] = downsample_indices
         centers[count] = ds_pc[i]

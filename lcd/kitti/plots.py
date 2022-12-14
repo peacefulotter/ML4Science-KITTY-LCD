@@ -18,6 +18,10 @@ colors_name = [
     'green'
 ]
 
+def plot_rgb_pc(rgb_pc):
+    pc, colors = np.hsplit(rgb_pc, 2)
+    plot_pc(pc, colors)
+
 def get_pc(pc, color_i):
     _pc = o3d.geometry.PointCloud()
     _pc.points = o3d.utility.Vector3dVector(pc)
@@ -32,6 +36,11 @@ def get_pc_with_color(pc, color):
     _pc.colors = o3d.utility.Vector3dVector(color)
     return _pc
 
+# plots.compare_pc_with_colors(
+#     pc_in_frame, colors,
+#     neigbors_pc, 'red',
+#     np.array([center]), 'green'
+# )
 def compare_pc_with_colors(*pcs):
     assert len([pc for pc in pcs if pc in colors_name or pc.shape[1] == 3]) == len(pcs)
     o3d.visualization.draw_geometries([

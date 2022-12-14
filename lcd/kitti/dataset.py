@@ -3,6 +3,7 @@ import numpy as np
 import torch.utils.data as data
 
 import metrics
+import plots
 from preprocess import KittiPreprocess
 
 class KittiDataset(data.Dataset):
@@ -68,6 +69,9 @@ if __name__ == '__main__':
 
     for i, batch in enumerate(loader):
         x = [x.to(device).float() for x in batch]
+
+        plots.plot_rgb_pc(batch[0][0])
+
         y0, z0 = pointnet(x[0])
         y1, z1 = patchnet(x[1])
         K = x[2]
@@ -76,7 +80,8 @@ if __name__ == '__main__':
         print(y0.shape, z0.shape)
         print(y1.shape, z1.shape)
 
-        pred_pose = metrics.get_pose(y0, y1, K)
-        print("pred_pose")
-        print(pred_pose.shape)
-        print(pred_pose)
+        for b in batch:
+            pred_pose = metrics.get_pose(y0, y1, K)
+            print("pred_pose")
+            print(pred_pose.shape)
+            print(pred_pose)

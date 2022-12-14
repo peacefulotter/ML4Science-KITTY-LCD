@@ -140,6 +140,7 @@ class KittiPreprocess:
         img_w, img_h = img.shape[1], img.shape[0]
         o_h = min(max(0, int(h - (self.img_h / 2))), img_h - self.img_h)
         o_w = min(max(0, int(w - (self.img_w / 2))), img_w - self.img_w)
+        # FIXME: remove points outofbounds
         # TODO: neighbors radius should be similar to cropped img w and h ??
         # TODO: problem if center not really at the center?
         return img[o_h : o_h + self.img_h, o_w : o_w + self.img_w]
@@ -170,6 +171,7 @@ class KittiPreprocess:
         data = np.load(path)
         return data['pc'], data['img'], data['Pi'].item()
 
+    # Storage issue /!\  
     def save_data(self, img_folder, i, pc, img, Pi):
         path = KittiPreprocess.resolve_data_path(img_folder, i)
         logger.info(f'Storing at {path}  - rgb_pc: {pc.shape}, img: {img.shape}')
@@ -221,8 +223,14 @@ class KittiPreprocess:
 
 
     def get_pc_in_frame(self, pc, img, seq_i, key, K):
+
+        print(seq_i, key)
+
         # Project point cloud to image
         Pi = self.calib[seq_i][key] # (3, 4)
+
+        # Pi[:3, :3] = Pi[:3, :3] * 2
+
         Tr = self.calib[seq_i]['Tr'] # (4, 4)
         P_Tr = np.matmul(Pi, Tr)
 
@@ -236,14 +244,27 @@ class KittiPreprocess:
         # discard the points behind the camera (of negative depth) -- these points get flipped during the z_projection
         depth_mask = ~(depth < 0.1)
         pts_front_cam = pts_cam[depth_mask]
+        
+        # pts_front_cam = (Pi[:3, :3] @ pc).T #  (Pi[:3, :3] @  [depth_mask]
+        print(pts_front_cam.shape)
+
+        # pts_front_cam[:, 0] += img.shape[1] / 2
+        # pts_front_cam[:, 1] += img.shape[0] / 2
+
+        print(pts_front_cam)
+
+        def camera_matrix_scaling(K: np.ndarray, s: float):
+            K_scale = s * K
+            K_scale[2, 2] = 1
+            return K_scale
 
         # TODO better K - use the real one
-        K = np.eye(3) * 1 / 100
+        # K = np.eye(3) * 1 / 100
         # TODO: playing around with this value changes the pc
         # K = camera_matrix_scaling(K, 1/4)  # the 1/4 is the number I saw in CorrI2P
         # K = camera_matrix_cropping(K, dx=dx, dy=dy)
 
-        pts_front_cam = (K @ pts_front_cam.T).T
+        # pts_front_cam = (K @ pts_front_cam.T).T
         # max_point_height = max(pts_front_cam[:, 2]) # heighest z val in point cloud projected to camera
 
         def z_projection(pts):
@@ -251,6 +272,11 @@ class KittiPreprocess:
             return pts / z, z
 
         pts_on_camera_plane, z = z_projection(pts_front_cam)
+
+        print('before', pts_on_camera_plane[:, 1])
+        pts_on_camera_plane[: 1] = img.shape[0] - pts_on_camera_plane[: 1]
+
+        print(pts_on_camera_plane[:, 1])
 
         # take the points falling inside the image
         in_image_mask = (
@@ -260,6 +286,29 @@ class KittiPreprocess:
             (pts_on_camera_plane[:, 1] < img.shape[0])
         )
         pts_in_frame = pts_on_camera_plane[in_image_mask]
+
+        offset = -img.shape[0] / 6
+        pts_in_frame_offset = pts_in_frame.copy()
+        pts_in_frame_offset[:, 1] = pts_in_frame_offset[:, 1] + offset
+
+        print(pts_in_frame)
+        print(pts_in_frame[pts_in_frame < 0])
+
+
+        color_mask = np.floor(pts_in_frame_offset).astype(int)
+        projected_colors = img[ color_mask[:, 1], color_mask[:, 0] ] / 255 # (M, 3) RGB per point
+        total_mask = self.combine_masks(depth_mask, in_image_mask)
+        plot_pc = pc.T[total_mask]
+        plot_pc[:, 1] += offset
+        plots.plot_pc(plot_pc, projected_colors)
+
+        import matplotlib.pyplot as plt
+        # _, ax = plt.subplots(nrows=2)
+        # ax[0].imshow(img)
+        plt.imshow(img)
+        # ax[1].scatter(pts_in_frame[:, 0], pts_in_frame[:, 1], marker=1)
+        plt.scatter(pts_in_frame_offset[:, 0], pts_in_frame_offset[:, 1], marker=1)
+        plt.show()
 
         return pts_in_frame, depth_mask, in_image_mask
 
@@ -282,13 +331,18 @@ class KittiPreprocess:
 
     def __getitem__(self, index):
         img_folder, pc_folder, K_folder, seq_i, img_i, key = self.dataset[index]
+
         img, pc, intensity, sn, K = self.load_item(img_folder, pc_folder, K_folder, img_i)
         pc_in_frame, intensity_in_frame, sn_in_frame, projected_colors = self.full_projection(pc, intensity, sn, img, seq_i, key, K)
+
+        print("shapes", pc.shape, pc_in_frame.shape)
 
         # TODO: delete? (retries when no points)
         if pc_in_frame.shape[0] == 0:
             logger.warn('Not enough points projected, retrying')
             return self.__getitem__(index)
+
+        # plots.plot_pc(pc_in_frame, projected_colors)
 
         # Voxel Downsample pointcloud
         ds_pc, ds_colors, ds_sn = self.voxel_down_sample(pc_in_frame, intensity_in_frame, sn_in_frame, projected_colors)
@@ -298,7 +352,7 @@ class KittiPreprocess:
         # Find neighbors for each point
         # TODO: remove [:10]
         # TODO: downsample to remove points that are close even further (i.e. increase voxel_grid_size)
-        neighbors_indices, centers_3D  = downsample_neighbors(ds_pc[:10], pc_in_frame, self.min_pc)
+        neighbors_indices, centers_3D  = downsample_neighbors(ds_pc, pc_in_frame, self.min_pc)
         logger.info(f'[Neighbors] original: {pc_in_frame.shape}, {neighbors_indices.shape}')
         
         centers_2D, _, _ = self.get_pc_in_frame(centers_3D.T, img, seq_i, key, K)
@@ -311,7 +365,7 @@ if __name__ == '__main__':
 
     w, h = 64, 64
     num_pc = pow(2,  10)
-    min_pc = 32
+    min_pc = 64
     root = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', '..')
     logger.info(f'Loading from root: {root}')
     preprocess = KittiPreprocess(
@@ -324,11 +378,12 @@ if __name__ == '__main__':
     )    
 
     # Save preprocessed calib files    
-    preprocess.save_calib_files()
+    # preprocess.save_calib_files()
 
     # Used to preprocess the kitti data and save it to the KittiPreprocess.KITTI_DATA_FOLDER
-    for i in range(15):
-        preprocess[i]
+    preprocess[1]
+    # for i in range(15):
+    #    preprocess[i]
 
     seq_i = 0
     img_i = 2

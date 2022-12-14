@@ -57,6 +57,7 @@ def downsample_neighbors(ds_pc, pc, min_neighbors, radius=1, downsample=1024):
     radius: radius of points to return, in meters
     downsample: downsamples the neighbors to be this amount (duplicate)
     '''
+    # TODO: 
     logger.info(f'Computing KDTree query_ball_point for {ds_pc.shape[0]} points with {pc.shape[0]} total points')
     import scipy.spatial as spatial
     tree = spatial.KDTree(pc)

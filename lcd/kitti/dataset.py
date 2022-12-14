@@ -1,4 +1,5 @@
 import os
+import numpy as np
 import torch.utils.data as data
 
 import metrics
@@ -9,6 +10,16 @@ class KittiDataset(data.Dataset):
         super(KittiDataset, self).__init__(*args, **kwargs)
         self.root = root
         self.seq_list = KittiPreprocess.SEQ_LISTS[mode]
+        self.calibs = self.import_calibs()
+
+    def import_calibs(self):
+        calibs = [{} for i in range(len(self.seq_list))]
+        base_folder = os.path.join(self.root, KittiPreprocess.KITTI_DATA_FOLDER)
+        for seq_i in self.seq_list:
+            path = os.path.join(base_folder, str(seq_i), 'calib.npz')
+            data = np.load(path)
+            calibs[seq_i] = {'P2': data['P2'], 'P3': data['P3']}
+        return calibs
 
     def __len__(self):
         # TODO: find way to compute length
@@ -19,9 +30,13 @@ class KittiDataset(data.Dataset):
         seq_i = 0
         img_i = 0
         sample = 18 if index == 0 else 10
+        
         img_folder = KittiPreprocess.resolve_img_folder(self.root, seq_i, img_i)
         pc, img, P_i = KittiPreprocess.load_data(img_folder, sample)
-        return pc, img, P_i
+        K = self.calibs[seq_i][P_i]
+        print(pc.shape, img.shape, K.shape)
+
+        return pc, img, K
 
 
 if __name__ == '__main__':
@@ -55,8 +70,13 @@ if __name__ == '__main__':
         x = [x.to(device).float() for x in batch]
         y0, z0 = pointnet(x[0])
         y1, z1 = patchnet(x[1])
+        K = x[2]
+
         print(x[0].shape, x[1].shape)
         print(y0.shape, z0.shape)
         print(y1.shape, z1.shape)
 
         pred_pose = metrics.get_pose(y0, y1, K)
+        print("pred_pose")
+        print(pred_pose.shape)
+        print(pred_pose)

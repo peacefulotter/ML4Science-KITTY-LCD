@@ -175,7 +175,7 @@ def test_rigid_transform():
 
     err = np.multiply(err, err)
     err = np.sum(err)
-    rmse = np.sqrt(err/n);
+    rmse = np.sqrt(err/n)
 
     print("Rotation")
     print(R)

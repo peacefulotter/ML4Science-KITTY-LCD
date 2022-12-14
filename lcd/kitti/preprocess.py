@@ -76,12 +76,7 @@ class KittiPreprocess:
     def __len__(self):
         return len(self.dataset)
 
-    def crop_img(self, img, max_point_height = np.inf):
-        w, h = self.img_w, self.img_h
-        dx = np.random.randint(0, min(img.shape[1] - w, max_point_height))
-        dy = np.random.randint(0, img.shape[0] - h)
-        return img[dy: dy + h, dx: dx + w, :], dx, dy
-
+    # TODO: delete or move to plots
     def display_points_in_image(self, depth_mask, in_frame_mask, pc):
         total_mask = self.combine_masks(depth_mask, in_frame_mask)
         colors = np.zeros(pc.shape)
@@ -141,11 +136,13 @@ class KittiPreprocess:
         returns:
             cropped_img = (self.img_h, self.img_w)
         '''
-        x, y = center[0], center[1]
-        o_x = max(0, int(x - self.img_w / 2))
-        o_y = max(0, int(y - self.img_h / 2))
+        w, h = center[0], center[1]
+        img_w, img_h = img.shape[1], img.shape[0]
+        o_h = min(max(0, int(h - (self.img_h / 2))), img_h - self.img_h)
+        o_w = min(max(0, int(w - (self.img_w / 2))), img_w - self.img_w)
         # TODO: neighbors radius should be similar to cropped img w and h ??
-        return img[o_y : o_y + self.img_h, o_x : o_x + self.img_w]
+        # TODO: problem if center not really at the center?
+        return img[o_h : o_h + self.img_h, o_w : o_w + self.img_w]
 
     @staticmethod
     def resolve_img_folder(root, seq_i, img_i):
@@ -171,7 +168,7 @@ class KittiPreprocess:
         '''
         path = KittiPreprocess.resolve_data_path(img_folder, sample)
         data = np.load(path)
-        return data['pc'], data['img'], data['Pi']
+        return data['pc'], data['img'], data['Pi'].item()
 
     def save_data(self, img_folder, i, pc, img, Pi):
         path = KittiPreprocess.resolve_data_path(img_folder, i)
@@ -327,11 +324,11 @@ if __name__ == '__main__':
     )    
 
     # Save preprocessed calib files    
-    # preprocess.save_calib_files()
+    preprocess.save_calib_files()
 
     # Used to preprocess the kitti data and save it to the KittiPreprocess.KITTI_DATA_FOLDER
-    # for i in range(15):
-    #    preprocess[i]
+    for i in range(15):
+        preprocess[i]
 
     seq_i = 0
     img_i = 2

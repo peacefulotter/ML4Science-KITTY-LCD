@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import torch
 
 from scipy.spatial.transform import Rotation as R
 
@@ -73,18 +74,28 @@ def get_img_xy_pc(pc, img_feature, pc_feature, img_score, pc_score, *args):
 
     return pc_sel, img_xy_pc
 
+@torch.no_grad()
 def get_pose(pc, img, K, dist_thres=1):
+    # TODO: why pnpransac
+    # TODO: what are those parameters
+    pc = pc.cpu().detach().numpy().astype(float)
+    img = img.cpu().detach().numpy().astype(float)
+    K = K.cpu().detach().numpy().astype(float)
+    print(pc.dtype, img.dtype, K.dtype)
     _, R, t, _ = cv2.solvePnPRansac(
-        pc.T, img.T, K, useExtrinsicGuess=False,
-        iterationsCount=500, reprojectionError=dist_thres, 
-        flags=cv2.SOLVEPNP_EPNP, distCoeffs=None
+        pc, img, K, 
+        # useExtrinsicGuess=False,
+        # iterationsCount=500, 
+        reprojectionError=dist_thres, 
+        flags=cv2.SOLVEPNP_EPNP, 
+        distCoeffs=None
     )
-    R, _ = cv2.Rodrigues(R)
+    R, _ = cv2.Rodrigues(R) # Converts rotation vector to matrix
     
-    pose = np.eye(4)
-    pose[:3, :3] = R
-    pose[:3, 3:] = t
-    return pose
+    # pose = np.eye(4)
+    # pose[:3, :3] = R
+    # pose[:3, 3:] = t
+    return R, t
 
 # Relative Translational Error (RTE)
 # Relative Rotational Error (RRE)

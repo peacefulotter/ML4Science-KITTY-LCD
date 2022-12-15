@@ -35,7 +35,6 @@ class KittiDataset(data.Dataset):
         img_folder = KittiPreprocess.resolve_img_folder(self.root, seq_i, img_i)
         pc, img, P_i = KittiPreprocess.load_data(img_folder, sample)
         K = self.calibs[seq_i][P_i]
-        print(pc.shape, img.shape, K.shape)
 
         return pc, img, K
 
@@ -70,18 +69,19 @@ if __name__ == '__main__':
     for i, batch in enumerate(loader):
         x = [x.to(device).float() for x in batch]
 
-        plots.plot_rgb_pc(batch[0][0])
+        # plots.plot_rgb_pc(batch[0][0])
 
         y0, z0 = pointnet(x[0])
         y1, z1 = patchnet(x[1])
-        K = x[2]
+        Ks = x[2]
 
-        print(x[0].shape, x[1].shape)
-        print(y0.shape, z0.shape)
-        print(y1.shape, z1.shape)
+        print("input batch", x[0].shape, x[1].shape)
+        print("pointnet output", y0.shape, z0.shape)
+        print("pathnet output", y1.shape, z1.shape)
 
-        for b in batch:
-            pred_pose = metrics.get_pose(y0, y1, K)
+        for pred_rgb_pc, pred_img, K in zip(y0, y1, Ks):
+            pred_pc, colors = np.hsplit(pred_rgb_pc, 2)
+            pred_R, pred_t = metrics.get_pose(pred_pc, pred_img, K)
             print("pred_pose")
-            print(pred_pose.shape)
-            print(pred_pose)
+            print(pred_R.shape, pred_t.shape)
+            print(pred_R, pred_t)

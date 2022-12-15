@@ -20,14 +20,14 @@ class KittiPreprocess:
         "debug": [0]
     }
 
-    def __init__(self, root, mode: DATASET_TYPES, img_width=64, img_height=64, num_pc=4096, min_pc=128):
+    def __init__(self, root, mode: DATASET_TYPES, patch_w=64, patch_h=64, num_pc=4096, min_pc=128):
         if mode != "debug":
             logger.disable(__name__)
 
         self.root = root
         self.mode = mode
-        self.img_w = img_width
-        self.img_h = img_height
+        self.patch_w = patch_w
+        self.patch_h = patch_h
         self.num_pc = num_pc
         self.min_pc = min_pc
         
@@ -135,16 +135,16 @@ class KittiPreprocess:
             center = (1, 3) - point that can be projected on the image
             img = (H, W, 3) array of rgb values
         returns:
-            cropped_img = (self.img_h, self.img_w)
+            cropped_img = (self.patch_h, self.patch_w)
         '''
         w, h = center[0], center[1]
         img_w, img_h = img.shape[1], img.shape[0]
-        o_h = min(max(0, int(h - (self.img_h / 2))), img_h - self.img_h)
-        o_w = min(max(0, int(w - (self.img_w / 2))), img_w - self.img_w)
+        o_h = min(max(0, int(h - (self.patch_h / 2))), img_h - self.patch_h)
+        o_w = min(max(0, int(w - (self.patch_w / 2))), img_w - self.patch_w)
         # FIXME: remove points outofbounds
         # TODO: neighbors radius should be similar to cropped img w and h ??
         # TODO: problem if center not really at the center?
-        return img[o_h : o_h + self.img_h, o_w : o_w + self.img_w]
+        return img[o_h : o_h + self.patch_h, o_w : o_w + self.patch_w]
 
     @staticmethod
     def resolve_img_folder(root, seq_i, img_i):
@@ -225,8 +225,6 @@ class KittiPreprocess:
 
     def get_pc_in_frame(self, pc, img, seq_i, key, K):
 
-        print(seq_i, key)
-
         # Project point cloud to image
         Pi = self.calib[seq_i][key] # (3, 4)
 
@@ -247,24 +245,8 @@ class KittiPreprocess:
         pts_front_cam = pts_cam[depth_mask]
         
         # pts_front_cam = (Pi[:3, :3] @ pc).T #  (Pi[:3, :3] @  [depth_mask]
-        print(pts_front_cam.shape)
-
         # pts_front_cam[:, 0] += img.shape[1] / 2
         # pts_front_cam[:, 1] += img.shape[0] / 2
-
-        print(pts_front_cam)
-
-        def camera_matrix_scaling(K: np.ndarray, s: float):
-            K_scale = s * K
-            K_scale[2, 2] = 1
-            return K_scale
-
-        # TODO better K - use the real one
-        # K = np.eye(3) * 1 / 100
-        # TODO: playing around with this value changes the pc
-        # K = camera_matrix_scaling(K, 1/4)  # the 1/4 is the number I saw in CorrI2P
-        # K = camera_matrix_cropping(K, dx=dx, dy=dy)
-
         # pts_front_cam = (K @ pts_front_cam.T).T
         # max_point_height = max(pts_front_cam[:, 2]) # heighest z val in point cloud projected to camera
 
@@ -273,11 +255,7 @@ class KittiPreprocess:
             return pts / z, z
 
         pts_on_camera_plane, z = z_projection(pts_front_cam)
-
-        print('before', pts_on_camera_plane[:, 1])
         pts_on_camera_plane[: 1] = img.shape[0] - pts_on_camera_plane[: 1]
-
-        print(pts_on_camera_plane[:, 1])
 
         # take the points falling inside the image
         in_image_mask = (
@@ -292,22 +270,17 @@ class KittiPreprocess:
         pts_in_frame_offset = pts_in_frame.copy()
         pts_in_frame_offset[:, 1] = pts_in_frame_offset[:, 1] + offset
 
-        print(pts_in_frame)
-        print(pts_in_frame[pts_in_frame < 0])
-
         color_mask = np.floor(pts_in_frame_offset).astype(int)
         projected_colors = img[ color_mask[:, 1], color_mask[:, 0] ] / 255 # (M, 3) RGB per point
         total_mask = self.combine_masks(depth_mask, in_image_mask)
         plot_pc = pc.T[total_mask]
         plot_pc[:, 1] += offset
-        plots.plot_pc(plot_pc, projected_colors)
+        # plots.plot_pc(plot_pc, projected_colors)
 
         import matplotlib.pyplot as plt
-        # _, ax = plt.subplots(nrows=2)
-        # ax[0].imshow(img)
+        # # ax[0].imshow(img)
         plt.imshow(img)
-        # ax[1].scatter(pts_in_frame[:, 0], pts_in_frame[:, 1], marker=1)
-        plt.scatter(pts_in_frame_offset[:, 0], pts_in_frame_offset[:, 1], marker=1)
+        plt.scatter(pts_in_frame_offset[:, 0], pts_in_frame_offset[:, 1], c=z[in_image_mask], marker=".")
         plt.show()
 
         return pts_in_frame, depth_mask, in_image_mask
@@ -329,13 +302,23 @@ class KittiPreprocess:
 
         return pc_in_frame, intensity_in_frame, sn_in_frame, projected_colors
 
+    def remove_center_outliers(self, centers_2D, img):
+        u, v, z = centers_2D
+        h, w, _ = img.shape
+        min_w = self.patch_w / 2
+        min_h = self.patch_h / 2
+        u_in = np.logical_and(u >= min_w, u <= w - min_w)
+        v_in = np.logical_and(v >= min_h, v <= h - min_h)
+        inliers_mask = np.logical_and(u_in, v_in)
+        centers_2D = centers_2D.T[inliers_mask]
+        return centers_2D, inliers_mask
+
+
     def __getitem__(self, index):
         img_folder, pc_folder, K_folder, seq_i, img_i, key = self.dataset[index]
 
         img, pc, intensity, sn, K = self.load_item(img_folder, pc_folder, K_folder, img_i)
         pc_in_frame, intensity_in_frame, sn_in_frame, projected_colors = self.full_projection(pc, intensity, sn, img, seq_i, key, K)
-
-        print("shapes", pc.shape, pc_in_frame.shape)
 
         # TODO: delete? (retries when no points)
         if pc_in_frame.shape[0] == 0:
@@ -350,14 +333,25 @@ class KittiPreprocess:
         logger.info(f'[Downsample] original: {pc_in_frame.shape}, downsampled: {ds_pc.shape}')
 
         # Find neighbors for each point
-        # TODO: remove [:10]
-        # TODO: downsample to remove points that are close even further (i.e. increase voxel_grid_size)
         neighbors_indices, centers_3D  = downsample_neighbors(ds_pc, pc_in_frame, self.min_pc)
         logger.info(f'[Neighbors] original: {pc_in_frame.shape}, {neighbors_indices.shape}')
         
-        centers_2D, _, _ = self.get_pc_in_frame(centers_3D.T, img, seq_i, key, K)
+        # Project the 3D neighbourhoods center 
+        centers_2D, center_depth_mask, in_image_center_mask = self.get_pc_in_frame(centers_3D.T, img, seq_i, key, K)
         centers_2D = np.floor(centers_2D).astype(int)
+        centers_2D = centers_2D.T
 
+        # Again, centers from the voxel down sample might fall outside the image bounds = need to filter
+        center_total_mask = self.combine_masks(center_depth_mask, in_image_center_mask)
+        neighbors_indices = neighbors_indices[center_total_mask]
+        centers_3D = centers_3D[center_total_mask]
+
+        # Remove points that fall outside of the img bounds
+        centers_2D, inliers_mask = self.remove_center_outliers(centers_2D, img)
+
+        neighbors_indices = neighbors_indices[inliers_mask]
+        centers_3D = centers_3D[inliers_mask]
+       
         self.store_result(seq_i, img_i, pc_in_frame, projected_colors, centers_2D, img, neighbors_indices, Pi=key)
 
 
@@ -371,17 +365,22 @@ if __name__ == '__main__':
     preprocess = KittiPreprocess(
         root=root,
         mode='debug', # TODO: change this to "all"
-        img_width=w,
-        img_height=h,
+        patch_w=w,
+        patch_h=h,
         num_pc=num_pc,
         min_pc=min_pc
-    )    
+    )   
+
+    for i in range(70, 100, 2):
+        img_folder, pc_folder, K_folder, seq_i, img_i, key = preprocess.dataset[i]
+        img, pc, intensity, sn, K = preprocess.load_item(img_folder, pc_folder, K_folder, img_i)
+        preprocess.get_pc_in_frame(pc, img, seq_i, key, K) 
 
     # Save preprocessed calib files    
     # preprocess.save_calib_files()
 
     # Used to preprocess the kitti data and save it to the KittiPreprocess.KITTI_DATA_FOLDER
-    preprocess[1]
+    # preprocess[1]
     # for i in range(15):
     #    preprocess[i]
 

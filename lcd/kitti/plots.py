@@ -60,27 +60,6 @@ def plot_pc(pc, colors=None):
     o3d.visualization.draw_geometries([pointcloud])
 
 
-def plot_projected_depth(pc, Tr, P, img, img_w, img_h):
-
-    # Project pointcloud to the i'th image plane
-    projection, depth = pointcloud.project_image(pc, Tr, P)
-    pixel_coordinates, indices = pointcloud.proj_pixel_coordinates(projection, img_w, img_h)
-
-    depth = depth[indices]
-    print("pc original shape: ", pc.shape)
-
-    pc = pc[:, indices]
-
-    # Establish empty render image, then fill with the depths of each point
-    render = np.zeros((img_h, img_w))
-    for j, (u, v) in enumerate(pixel_coordinates):
-        render[v, u] = depth[j]
-
-    _, ax = plt.subplots(nrows=2)
-    ax[0].imshow(img)
-    ax[1].imshow(render, vmin=0, vmax=np.max(render) / 2)
-    plt.show()
-
 def plot_imgs(*imgs):
     _, axes = plt.subplots(nrows=len(imgs))
     for i, img in enumerate(imgs):

@@ -117,18 +117,6 @@ class KittiPreprocess:
 
         return down_pcd_points, down_pcd_colors, down_pcd_sn
 
-    def downsample_np(self, pc, colors):
-        nb_points = pc.shape[0]
-        if nb_points >= self.num_pc:
-            choice_idx = np.random.choice(nb_points, self.num_pc, replace=False)
-        else:
-            fix_idx = np.asarray(range(nb_points))
-            while nb_points + fix_idx.shape[0] < self.num_pc:
-                fix_idx = np.concatenate((fix_idx, np.asarray(range(nb_points))), axis=0)
-            random_idx = np.random.choice(nb_points, self.num_pc - fix_idx.shape[0], replace=False)
-            choice_idx = np.concatenate((fix_idx, random_idx), axis=0)
-        return pc[choice_idx], colors[choice_idx]
-
     def get_cropped_img(self, center, img):
         '''
         params:
@@ -141,9 +129,7 @@ class KittiPreprocess:
         img_w, img_h = img.shape[1], img.shape[0]
         o_h = min(max(0, int(h - (self.patch_h / 2))), img_h - self.patch_h)
         o_w = min(max(0, int(w - (self.patch_w / 2))), img_w - self.patch_w)
-        # FIXME: remove points outofbounds
         # TODO: neighbors radius should be similar to cropped img w and h ??
-        # TODO: problem if center not really at the center?
         return img[o_h : o_h + self.patch_h, o_w : o_w + self.patch_w]
 
     @staticmethod
@@ -280,7 +266,8 @@ class KittiPreprocess:
         import matplotlib.pyplot as plt
         # # ax[0].imshow(img)
         plt.imshow(img)
-        plt.scatter(pts_in_frame_offset[:, 0], pts_in_frame_offset[:, 1], c=z[in_image_mask], marker=".")
+        plt.scatter(pts_in_frame_offset[:, 0], pts_in_frame_offset[:, 1], c=z[in_image_mask], cmap='plasma_r', marker=".", s=5)
+        plt.colorbar()
         plt.show()
 
         return pts_in_frame, depth_mask, in_image_mask
@@ -371,7 +358,12 @@ if __name__ == '__main__':
         min_pc=min_pc
     )   
 
-    for i in range(70, 100, 2):
+    # TODO: test.py did not work 
+    # TODO: offset fails for some image
+    # TODO: + different offset for P3
+
+    start_idx = 0 # TODO: replace with 70
+    for i in range(start_idx, 100, 2):
         img_folder, pc_folder, K_folder, seq_i, img_i, key = preprocess.dataset[i]
         img, pc, intensity, sn, K = preprocess.load_item(img_folder, pc_folder, K_folder, img_i)
         preprocess.get_pc_in_frame(pc, img, seq_i, key, K) 

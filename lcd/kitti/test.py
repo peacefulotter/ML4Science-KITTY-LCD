@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
 
 def extract_key_mat(line):
@@ -33,39 +34,64 @@ def read_calib_line(line):
 
 root = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', '..')
 
-calib = []
+calib = {}
 calib_path = os.path.join(root, 'calib', '00', 'calib.txt')
 with open(calib_path,'r') as f:
     for line in f.readlines():
         key, mat = read_calib_line(line)
-        calib.append( mat )
+        calib[key] = mat
 print(calib)
 
 
-img = 
+from preprocess import KittiPreprocess 
+preprocess = KittiPreprocess(
+    root=root,
+    mode='debug',
+    patch_w=64,
+    patch_h=64,
+    num_pc=1024,
+    min_pc=32
+)  
+
+idx = 70
+img_folder, pc_folder, K_folder, seq_i, img_i, key = preprocess.dataset[idx]
+img, pc, intensity, sn, K = preprocess.load_item(img_folder, pc_folder, K_folder, img_i)
+
+print(pc.shape)
 
 # P2 (3 x 4) for left eye
-P2 = np.matrix([float(x) for x in calib[2].strip('\n').split(' ')[1:]]).reshape(3,4)
+P2 = calib['P2']
 # R0_rect = np.matrix([float(x) for x in calib[4].strip('\n').split(' ')[1:]]).reshape(3,3)
 # Add a 1 in bottom-right, reshape to 4 x 4
 # R0_rect = np.insert(R0_rect,3,values=[0,0,0],axis=0)
 # R0_rect = np.insert(R0_rect,3,values=[0,0,0,1],axis=1)
-Tr_velo_to_cam = np.matrix([float(x) for x in calib[5].strip('\n').split(' ')[1:]]).reshape(3,4)
-Tr_velo_to_cam = np.insert(Tr_velo_to_cam,3,values=[0,0,0,1],axis=0)
+# Tr_velo_to_cam = np.matrix([float(x) for x in calib[5].strip('\n').split(' ')[1:]]).reshape(3,4)
+# Tr_velo_to_cam =x np.insert(Tr_velo_to_cam,3,values=[0,0,0,1],axis=0)
+Tr = calib['Tr']
+
+print(P2.shape, Tr.shape)
 
 # read raw data from binary
 # scan = np.fromfile(binary, dtype=np.float32).reshape((-1,4))
-points = scan[:, 0:3] # lidar xyz (front, left, up)
-# TODO: use fov filter? 
-velo = np.insert(points,3,1,axis=1).T
-velo = np.delete(velo,np.where(velo[0,:]<0),axis=1)
-cam = P2 * R0_rect * Tr_velo_to_cam * velo
-cam = np.delete(cam,np.where(cam[2,:]<0)[1],axis=1)
+points = pc # scan[:, 0:3] # lidar xyz (front, left, up)
+print(points.shape)
+velo = np.insert(points,3,1,axis=1)
+velo = np.delete(velo,np.where(velo[:, 0]<0),axis=1)
+# cam = P2 * R0_rect * Tr_velo_to_cam * velo
+print(velo.shape)
+# no other choice to add a row of one
+velo = np.r_[ velo, np.ones((1,velo.shape[1])) ]
+
+cam = (np.matmul(P2, Tr) @ velo)
+print(cam.shape)
+print("where", np.where(cam[2,:]<0)[0].shape)
+cam = np.delete(cam,np.where(cam[2,:]<0)[0],axis=1)
+print(cam.shape)
 # get u,v,z
 cam[:2] /= cam[2,:]
 # do projection staff
 plt.figure(figsize=(12,5),dpi=96,tight_layout=True)
-png = mpimg.imread(img)
+png = img # mpimg.imread(img)
 IMG_H,IMG_W,_ = png.shape
 # restrict canvas in range
 plt.axis([0,IMG_W,IMG_H,0])
@@ -79,6 +105,6 @@ cam = np.delete(cam,np.where(outlier),axis=1)
 # generate color map from depth
 u,v,z = cam
 plt.scatter([u],[v],c=[z],cmap='rainbow_r',alpha=0.5,s=2)
-plt.title(name)
-plt.savefig(f'./data_object_image_2/testing/projection/{name}.png',bbox_inches='tight')
+plt.title('Name')
+# plt.savefig(f'./{"Name"}.png',bbox_inches='tight')
 plt.show()

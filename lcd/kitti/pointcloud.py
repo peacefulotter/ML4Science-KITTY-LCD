@@ -2,34 +2,6 @@ import numpy as np
 
 from loguru import logger
 
-
-def rigid_transform_3D(A, B):
-    assert len(A) == len(B)
-
-    N = A.shape[0]; # total points
-
-    centroid_A = np.mean(A, axis=0)
-    centroid_B = np.mean(B, axis=0)
-
-    # centre the points
-    AA = A - np.tile(centroid_A, (N, 1))
-    BB = B - np.tile(centroid_B, (N, 1))
-
-    # dot is matrix multiplication for array
-    H = np.transpose(AA) * BB
-
-    U, S, Vt = np.linalg.svd(H)
-
-    R = Vt.T * U.T
-
-    # special reflection case
-    if np.linalg.det(R) < 0:
-       print("Reflection detected")
-       Vt[2,:] *= -1
-       R = Vt.T * U.T
-    t = -R * centroid_A.T + centroid_B.T
-    return R, t
-
 def downsample_arr(arr, num):
     nb_points = arr.shape[0]
     if nb_points >= num:
@@ -57,7 +29,6 @@ def downsample_neighbors(ds_pc, pc, min_neighbors, radius=1, downsample=1024):
     radius: radius of points to return, in meters
     downsample: downsamples the neighbors to be this amount (duplicate)
     '''
-    # TODO: 
     logger.info(f'Computing KDTree query_ball_point for {ds_pc.shape[0]} points with {pc.shape[0]} total points')
     import scipy.spatial as spatial
     tree = spatial.KDTree(pc)
@@ -69,7 +40,6 @@ def downsample_neighbors(ds_pc, pc, min_neighbors, radius=1, downsample=1024):
         indices = np.array(indices)
         if indices.shape[0] < min_neighbors:
             continue
-        # Add the center point to neighbors
         downsample_indices = downsample_arr(indices, num=downsample)
         neighbors[count] = downsample_indices
         centers[count] = ds_pc[i]
@@ -77,72 +47,62 @@ def downsample_neighbors(ds_pc, pc, min_neighbors, radius=1, downsample=1024):
     logger.info(f'Found neighbors for {count} points')
     return neighbors[:count, :], centers[:count]
 
+# def project_image(pc, Tr, P):
+#     # We know the lidar X axis points forward, we need nothing behind the lidar, so we
+#     # ignore anything with a X value less than or equal to zero
+#     pc = pc[pc[:, 0] > 0].T
+    
+#     # Add row of ones to make coordinates homogeneous for tranformation into the camera coordinate frame
+#     pc = np.hstack([pc, np.ones(pc.shape[0]).reshape((-1,1))])
+
+#     # Transform pointcloud into camera coordinate frame
+#     cam_xyz = Tr.dot(pc.T)
+    
+#     # Ignore any points behind the camera (probably redundant but just in case)
+#     cam_xyz = cam_xyz[:, cam_xyz[2] > 0]
+    
+#     # Extract the Z row which is the depth from camera
+#     depth = cam_xyz[2].copy()
+    
+#     # Project coordinates in camera frame to flat plane at Z=1 by dividing by Z
+#     cam_xyz /= cam_xyz[2]
+    
+#     # Add row of ones to make our 3D coordinates on plane homogeneous for dotting with P0
+#     # cam_xyz = np.vstack([cam_xyz, np.ones(cam_xyz.shape[1])])
+
+#     # Get pixel coordinates of X, Y, Z points in camera coordinate frame
+#     projection = P.dot(cam_xyz)
+#     # projection = projection / projection[2]
+
+#     return projection # , depth
 
 
-def project_image(pc, Tr, P):
-    # We know the lidar X axis points forward, we need nothing behind the lidar, so we
-    # ignore anything with a X value less than or equal to zero
-    pc = pc[pc[:, 0] > 0].T
-    
-    # Add row of ones to make coordinates homogeneous for tranformation into the camera coordinate frame
-    pc = np.hstack([pc, np.ones(pc.shape[0]).reshape((-1,1))])
+def rigid_transform_3D(A, B):
+    assert len(A) == len(B)
 
-    # Transform pointcloud into camera coordinate frame
-    cam_xyz = Tr.dot(pc.T)
-    
-    # Ignore any points behind the camera (probably redundant but just in case)
-    cam_xyz = cam_xyz[:, cam_xyz[2] > 0]
-    
-    # Extract the Z row which is the depth from camera
-    depth = cam_xyz[2].copy()
-    
-    # Project coordinates in camera frame to flat plane at Z=1 by dividing by Z
-    cam_xyz /= cam_xyz[2]
-    
-    # Add row of ones to make our 3D coordinates on plane homogeneous for dotting with P0
-    # cam_xyz = np.vstack([cam_xyz, np.ones(cam_xyz.shape[1])])
+    N = A.shape[0]; # total points
 
-    # Get pixel coordinates of X, Y, Z points in camera coordinate frame
-    projection = P.dot(cam_xyz)
-    # projection = projection / projection[2]
+    centroid_A = np.mean(A, axis=0)
+    centroid_B = np.mean(B, axis=0)
 
-    return projection # , depth
+    # centre the points
+    AA = A - np.tile(centroid_A, (N, 1))
+    BB = B - np.tile(centroid_B, (N, 1))
 
-def proj_pixel_coordinates(projection, img_w, img_h):
-    # Turn pixels into integers for indexing
-    pixel_coordinates = np.round(projection.T, 0)[:, :2].astype('int')
-    # Limit pixel coordinates considered to those that fit on the image plane
-    indices = np.where(
-        (pixel_coordinates[:, 0] < img_w) & 
-        (pixel_coordinates[:, 0] >= 0) & 
-        (pixel_coordinates[:, 1] < img_h) & 
-        (pixel_coordinates[:, 1] >= 0)
-    )
-    pixel_coordinates = pixel_coordinates[indices]
-    return pixel_coordinates, indices[0]
+    # dot is matrix multiplication for array
+    H = np.transpose(AA) * BB
 
-def pointcloud2image(pc, Tr, P, img_w, img_h):
-    '''
-    Takes a pointcloud of shape Nx4 and projects it onto an image plane, first transforming
-    the X, Y, Z coordinates of points to the camera frame with tranformation matrix Tr, then
-    projecting them using camera projection matrix P0.
-    
-    Arguments:
-    pointcloud -- array of shape Nx4 containing (X, Y, Z, reflectivity)
-    imheight -- height (in pixels) of image plane
-    imwidth -- width (in pixels) of image plane
-    Tr -- 3x4 transformation matrix between lidar (X, Y, Z, 1) homogeneous and camera (X, Y, Z)
-    P0 -- projection matrix of camera (should have identity transformation if Tr used)
-    
-    Returns:
-    render -- a (imheight x imwidth) array containing depth (Z) information from lidar scan
-    
-    '''
-    # Project pointcloud to the i'th image plane
-    projection, _ = project_image(pc, Tr, P)
-    _, indices = proj_pixel_coordinates(projection, img_w, img_h)
-    pc = pc[:, indices]
-    return pc
+    U, S, Vt = np.linalg.svd(H)
+
+    R = Vt.T * U.T
+
+    # special reflection case
+    if np.linalg.det(R) < 0:
+       print("Reflection detected")
+       Vt[2,:] *= -1
+       R = Vt.T * U.T
+    t = -R * centroid_A.T + centroid_B.T
+    return R, t
 
 
 def test_rigid_transform():

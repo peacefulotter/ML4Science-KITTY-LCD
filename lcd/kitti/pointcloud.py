@@ -1,7 +1,5 @@
 import numpy as np
 
-from loguru import logger
-
 def downsample_arr(arr, num):
     nb_points = arr.shape[0]
     if nb_points >= num:
@@ -29,7 +27,7 @@ def downsample_neighbors(ds_pc, pc, min_neighbors, radius=1, downsample=1024):
     radius: radius of points to return, in meters
     downsample: downsamples the neighbors to be this amount (duplicate)
     '''
-    logger.info(f'Computing KDTree query_ball_point for {ds_pc.shape[0]} points with {pc.shape[0]} total points')
+    print(f' > Computing KDTree query_ball_point for {ds_pc.shape[0]} points with {pc.shape[0]} total points')
     import scipy.spatial as spatial
     tree = spatial.KDTree(pc)
     ball_points = tree.query_ball_point(ds_pc, r=radius)
@@ -44,7 +42,7 @@ def downsample_neighbors(ds_pc, pc, min_neighbors, radius=1, downsample=1024):
         neighbors[count] = downsample_indices
         centers[count] = ds_pc[i]
         count += 1
-    logger.info(f'Found neighbors for {count} points')
+    print(f'\tFound neighbors for {count} points')
     return neighbors[:count, :], centers[:count]
 
 # def project_image(pc, Tr, P):

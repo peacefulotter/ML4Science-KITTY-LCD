@@ -75,7 +75,7 @@ def get_img_xy_pc(pc, img_feature, pc_feature, img_score, pc_score, *args):
     return pc_sel, img_xy_pc
 
 @torch.no_grad()
-def get_pose(pc, img, K, dist_thres=1):
+def get_pose(pc, img, K, dist_thres=5): # 5 pixels
     # TODO: why pnpransac
     # TODO: what are those parameters
     pc = pc.cpu().detach().numpy().astype(float)

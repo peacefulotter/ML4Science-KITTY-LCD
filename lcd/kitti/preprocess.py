@@ -3,7 +3,6 @@ import os
 import numpy as np
 import open3d as o3d
 from typing import Literal
-from loguru import logger
 
 from pointcloud import downsample_neighbors
 import calib
@@ -20,19 +19,23 @@ class KittiPreprocess:
         "debug": [0]
     }
 
-    def __init__(self, root, mode: DATASET_TYPES, patch_w=64, patch_h=64, num_pc=4096, min_pc=128):
-        if mode != "debug":
-            logger.disable(__name__)
-
+    def __init__(self, root, mode: DATASET_TYPES, patch_w=64, patch_h=64, num_pc=1024, min_pc=32):
+        '''
+        patch_w: patch image width 
+        patch_h: patch image height
+        num_pc: number of points in each pointcloud
+        min_pc: mininum number of points in a neighborhood, if less discard
+        '''
         self.root = root
         self.mode = mode
         self.patch_w = patch_w
         self.patch_h = patch_h
         self.num_pc = num_pc
         self.min_pc = min_pc
+        self.seq_list = KittiPreprocess.SEQ_LISTS[mode]
 
         self.dataset = self.make_kitti_dataset()
-        self.calib = calib.import_calib(root)
+        self.calibs = calib.import_calibs(root, self.seq_list)
 
 
     def get_dataset_folder(self, seq, name):
@@ -47,9 +50,8 @@ class KittiPreprocess:
             key, # key=(P2 or P3)
         '''
         dataset = []
-        seq_list = KittiPreprocess.SEQ_LISTS[self.mode]
-        logger.info(f'Loading {seq_list} sequences')
-        for seq_i in seq_list:
+        print(f' > Loading {self.seq_list} sequences')
+        for seq_i in self.seq_list:
             img2_folder = self.get_dataset_folder(seq_i, 'img_P2')
             img3_folder = self.get_dataset_folder(seq_i, 'img_P3')
             K2_folder = self.get_dataset_folder(seq_i, 'K_P2')
@@ -161,7 +163,7 @@ class KittiPreprocess:
     # Storage issue /!\
     def save_data(self, img_folder, i, pc, img, Pi):
         path = KittiPreprocess.resolve_data_path(img_folder, i)
-        logger.info(f'Storing at {path}  - rgb_pc: {pc.shape}, img: {img.shape}')
+        print(f' > Storing at {path}  - rgb_pc: {pc.shape}, img: {img.shape}')
         np.savez(path, pc=pc, img=img, Pi=Pi)
 
 
@@ -198,14 +200,14 @@ class KittiPreprocess:
         return root
 
     def save_calib_files(self):
-        for seq_i, seq_calib in enumerate(self.calib):
+        for seq_i, seq_calib in enumerate(self.calibs):
             path = self.make_nested_folders([str(seq_i)])
             res = {}
             for key, mat in seq_calib.items():
                 if key == 'P2' or key == 'P3':
                     res[key] = mat
             path = path + '/calib'
-            logger.info(f"Saving calib file {seq_i} to {path}")
+            print(f" > Saving calib file {seq_i} to {path}")
             np.savez(path, P2=res['P2'], P3=res['P3'])
 
 
@@ -252,7 +254,7 @@ class KittiPreprocess:
         )
         pts_in_frame = pts_on_camera_plane[in_image_mask]
 
-        offset = -img.shape[0] / 6
+        offset = 0 # -img.shape[0] / 6
         pts_in_frame_offset = pts_in_frame.copy()
         pts_in_frame_offset[:, 1] = pts_in_frame_offset[:, 1] + offset
 
@@ -266,6 +268,8 @@ class KittiPreprocess:
         # # ax[0].imshow(img)
         plt.figure()
         plt.imshow(img)
+        plt.scatter(pts_in_frame_offset[:, 0], pts_in_frame_offset[:, 1], c=z[in_image_mask], cmap='plasma_r', marker=".", s=5)
+        plt.colorbar()
         plt.show()
 
         #plots.plot_pc(plot_pc, projected_colors)
@@ -275,7 +279,7 @@ class KittiPreprocess:
         print(colors.shape, total_mask.shape)
         print(plot_pc.shape, projected_colors.shape)
 
-        plots.plot_pc(pc.T, colors)
+        # plots.plot_pc(pc.T, colors)
 
 
         """"
@@ -325,7 +329,7 @@ class KittiPreprocess:
 
         # TODO: delete? (retries when no points)
         if pc_in_frame.shape[0] == 0:
-            logger.warn('Not enough points projected, retrying')
+            print(' | Not enough points projected, retrying')
             return self.__getitem__(index)
 
         # plots.plot_pc(pc_in_frame, projected_colors)
@@ -333,11 +337,11 @@ class KittiPreprocess:
         # Voxel Downsample pointcloud
         ds_pc, ds_colors, ds_sn = self.voxel_down_sample(pc_in_frame, intensity_in_frame, sn_in_frame, projected_colors)
         # ds_pc_space, ds_colors = self.downsample_np(ds_pc, ds_colors)
-        logger.info(f'[Downsample] original: {pc_in_frame.shape}, downsampled: {ds_pc.shape}')
+        print(f' > [Downsample] original: {pc_in_frame.shape}, downsampled: {ds_pc.shape}')
 
         # Find neighbors for each point
         neighbors_indices, centers_3D  = downsample_neighbors(ds_pc, pc_in_frame, self.min_pc)
-        logger.info(f'[Neighbors] original: {pc_in_frame.shape}, {neighbors_indices.shape}')
+        print(f' > [Neighbors] original: {pc_in_frame.shape}, {neighbors_indices.shape}')
 
         # Project the 3D neighbourhoods center
         centers_2D, center_depth_mask, in_image_center_mask = self.get_pc_in_frame(centers_3D.T, img, seq_i, key, K)
@@ -363,25 +367,14 @@ class KittiPreprocess:
 
 if __name__ == '__main__':
 
-    w, h = 64, 64
-    num_pc = pow(2,  10)
-    min_pc = 64
     root = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', '..')
-    logger.info(f'Loading from root: {root}')
+    print(f' > Loading from root: {root}')
     preprocess = KittiPreprocess(
         root=root,
         mode='debug', # TODO: change this to "all"
-        patch_w=w,
-        patch_h=h,
-        num_pc=num_pc,
-        min_pc=min_pc
     )
 
-    # TODO: test.py did not work
-    # TODO: offset fails for some image
-    # TODO: + different offset for P3
-
-    start_idx = 0 # TODO: replace with 70
+    start_idx = 0
     for i in range(start_idx, 100, 2):
         img_folder, pc_folder, K_folder, seq_i, img_i, key = preprocess.dataset[i]
         img, pc, intensity, sn, K = preprocess.load_item(img_folder, pc_folder, K_folder, img_i)
@@ -401,5 +394,5 @@ if __name__ == '__main__':
     img_folder = preprocess.resolve_img_folder(root, seq_i, img_i)
     for sample in range(samples):
         pc, img, Pi = preprocess.load_data(img_folder, sample)
-        logger.success(f'sample: {sample} {pc.shape}, {img.shape}, {Pi}')
+        print(f' > Success, sample: {sample} {pc.shape}, {img.shape}, {Pi}')
         # plots.plot_rgb_pc(pc)

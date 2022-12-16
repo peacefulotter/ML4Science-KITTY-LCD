@@ -2,9 +2,8 @@ import os
 import numpy as np
 import torch.utils.data as data
 
-import metrics
-import plots
 from preprocess import KittiPreprocess
+import metrics
 
 class KittiDataset(data.Dataset):
     def __init__(self, root, mode: KittiPreprocess.DATASET_TYPES, *args, **kwargs):
@@ -71,15 +70,15 @@ if __name__ == '__main__':
 
         # plots.plot_rgb_pc(batch[0][0])
 
-        y0, z0 = pointnet(x[0])
-        y1, z1 = patchnet(x[1])
+        pred_pcs, point_descriptors = pointnet(x[0])
+        pred_imgs, patch_descriptors = patchnet(x[1])
         Ks = x[2]
 
         print("input batch", x[0].shape, x[1].shape)
-        print("pointnet output", y0.shape, z0.shape)
-        print("pathnet output", y1.shape, z1.shape)
+        print("pointnet output", pred_pcs.shape, point_descriptors.shape)
+        print("pathnet output", pred_imgs.shape, patch_descriptors.shape)
 
-        for pred_rgb_pc, pred_img, K in zip(y0, y1, Ks):
+        for pred_rgb_pc, pred_img, K in zip(pred_pcs, pred_img, Ks):
             pred_pc, colors = np.hsplit(pred_rgb_pc, 2)
             pred_R, pred_t = metrics.get_pose(pred_pc, pred_img, K)
             print("pred_pose")

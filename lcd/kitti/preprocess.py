@@ -50,7 +50,7 @@ class KittiPreprocess:
             key, # key=(P2 or P3)
         '''
         dataset = []
-        print(f' > Loading {self.seq_list} sequences')
+        print(f' > Dataset consists of {self.seq_list} sequences')
         for seq_i in self.seq_list:
             img2_folder = self.get_dataset_folder(seq_i, 'img_P2')
             img3_folder = self.get_dataset_folder(seq_i, 'img_P3')
@@ -59,21 +59,22 @@ class KittiPreprocess:
             pc_folder = self.get_dataset_folder(seq_i, 'pc_npy_with_normal')
             samples = round(len(os.listdir(img2_folder)))
             for img_i in range(samples):
-                dataset.append((img2_folder, pc_folder, K2_folder, seq_i, img_i, 'P2'))
-                dataset.append((img3_folder, pc_folder, K3_folder, seq_i, img_i, 'P3'))
+                # img_folder, pc_folder, sequence index, img index, camera index
+                dataset.append((img2_folder, pc_folder, seq_i, img_i, 2))
+                dataset.append((img3_folder, pc_folder, seq_i, img_i, 3))
         return dataset
 
     def load_npy(self, folder, seq_i):
         return np.load(os.path.join(folder, '%06d.npy' % seq_i))
 
-    def load_item(self, img_folder, pc_folder, K_folder, seq_i):
+    def load_item(self, img_folder, pc_folder, seq_i):
         img = self.load_npy(img_folder, seq_i)
         data = self.load_npy(pc_folder, seq_i)
-        K = self.load_npy(K_folder, seq_i)
+        # K = self.load_npy(K_folder, seq_i)
         pc = data[0:3, :]
         intensity = data[3:4, :]
         sn = data[4:, :] # surface normals
-        return img, pc, intensity, sn, K
+        return img, pc, intensity, sn
 
     def __len__(self):
         return len(self.dataset)
@@ -211,39 +212,24 @@ class KittiPreprocess:
             np.savez(path, P2=res['P2'], P3=res['P3'])
 
 
-    def get_pc_in_frame(self, pc, img, seq_i, key, K):
+    def project_pointcloud(self, pc, img, seq_i, cam_i):
 
-        # Project point cloud to image
-        Pi = self.calib[seq_i][key] # (3, 4)
+        # Get Pi and Ti from the calib file
+        calib = self.calibs[seq_i]
+        Pi = calib[f'P{cam_i}']
+        Ti = calib[f'T{cam_i}']
 
-        # Pi[:3, :3] = Pi[:3, :3] * 2
-
-        Tr = self.calib[seq_i]['Tr'] # (4, 4)
-        P_Tr = np.matmul(Pi, Tr)
-
-        pts_ext = np.r_[ pc, np.ones((1,pc.shape[1])) ]
-        pts_cam = (P_Tr @ pts_ext)[:3, :].T
-
-        # cam_x = pts_cam_T[:, 0]
-        # cam_y = pts_cam_T[:, 1]
-        depth = pts_cam[:, 2]
+        # Project onto the image
+        pc_ext = np.r_[ pc, np.zeros((1,pc.shape[1])) ]
+        pts_cam = (Pi @ Ti @ pc_ext)[:3, :].T
 
         # discard the points behind the camera (of negative depth) -- these points get flipped during the z_projection
+        depth = pts_cam[:, 2]
         depth_mask = ~(depth < 0.1)
         pts_front_cam = pts_cam[depth_mask]
 
-        # pts_front_cam = (Pi[:3, :3] @ pc).T #  (Pi[:3, :3] @  [depth_mask]
-        # pts_front_cam[:, 0] += img.shape[1] / 2
-        # pts_front_cam[:, 1] += img.shape[0] / 2
-        # pts_front_cam = (K @ pts_front_cam.T).T
-        # max_point_height = max(pts_front_cam[:, 2]) # heighest z val in point cloud projected to camera
-
-        def z_projection(pts):
-            z = pts[:, 2:3]
-            return pts / z, z
-
-        pts_on_camera_plane, z = z_projection(pts_front_cam)
-        pts_on_camera_plane[: 1] = img.shape[0] - pts_on_camera_plane[: 1]
+        z = pts_front_cam[:, 2:3]
+        pts_on_camera_plane = pts_front_cam / z
 
         # take the points falling inside the image
         in_image_mask = (
@@ -254,47 +240,33 @@ class KittiPreprocess:
         )
         pts_in_frame = pts_on_camera_plane[in_image_mask]
 
-        offset = 0 # -img.shape[0] / 6
-        pts_in_frame_offset = pts_in_frame.copy()
-        pts_in_frame_offset[:, 1] = pts_in_frame_offset[:, 1] + offset
-
-        color_mask = np.floor(pts_in_frame_offset).astype(int)
+        # Get RGB for each point on the image
+        color_mask = np.floor(pts_in_frame).astype(int)
         projected_colors = img[ color_mask[:, 1], color_mask[:, 0] ] / 255 # (M, 3) RGB per point
+        
+        # Get the pointcloud back using the masks indices
         total_mask = self.combine_masks(depth_mask, in_image_mask)
         plot_pc = pc.T[total_mask]
-        plot_pc[:, 1] += offset
 
         import matplotlib.pyplot as plt
-        # # ax[0].imshow(img)
         plt.figure()
         plt.imshow(img)
-        plt.scatter(pts_in_frame_offset[:, 0], pts_in_frame_offset[:, 1], c=z[in_image_mask], cmap='plasma_r', marker=".", s=5)
+        plt.scatter(pts_in_frame[:, 0], pts_in_frame[:, 1], c=z[in_image_mask], cmap='plasma_r', marker=".", s=5)
+        plt.scatter(plot_pc[:, 0], plot_pc[:, 1], plot_pc[:, 2])
         plt.colorbar()
         plt.show()
 
-        #plots.plot_pc(plot_pc, projected_colors)
         colors = np.zeros(pc.T.shape) # (M, 3) RGB per point
         colors[total_mask, :] = projected_colors
         colors[np.logical_not(total_mask), :] = np.array([109, 125, 141])/255
         print(colors.shape, total_mask.shape)
         print(plot_pc.shape, projected_colors.shape)
 
-        # plots.plot_pc(pc.T, colors)
-
-
-        """"
-        import matplotlib.pyplot as plt
-        # # ax[0].imshow(img)
-        plt.imshow(img)
-        plt.scatter(pts_in_frame_offset[:, 0], pts_in_frame_offset[:, 1], c=z[in_image_mask], cmap='plasma_r', marker=".", s=5)
-        plt.colorbar()
-        plt.show()"""
-
         return pts_in_frame, depth_mask, in_image_mask
 
-    def full_projection(self, pc, intensity, sn, img, seq_i, key, K):
+    def full_projection(self, pc, intensity, sn, img, seq_i, cam_i):
 
-        pts_in_frame, depth_mask, in_image_mask = self.get_pc_in_frame(pc, img, seq_i, key, K)
+        pts_in_frame, depth_mask, in_image_mask = self.project_pointcloud(pc, img, seq_i, cam_i)
 
         # TODO: add some noise to the color_mask
         color_mask = np.floor(pts_in_frame).astype(int)
@@ -322,10 +294,9 @@ class KittiPreprocess:
 
 
     def __getitem__(self, index):
-        img_folder, pc_folder, K_folder, seq_i, img_i, key = self.dataset[index]
-
-        img, pc, intensity, sn, K = self.load_item(img_folder, pc_folder, K_folder, img_i)
-        pc_in_frame, intensity_in_frame, sn_in_frame, projected_colors = self.full_projection(pc, intensity, sn, img, seq_i, key, K)
+        img_folder, pc_folder, seq_i, img_i, cam_i = self.dataset[index]
+        img, pc, intensity, sn = self.load_item(img_folder, pc_folder, img_i)
+        pc_in_frame, intensity_in_frame, sn_in_frame, projected_colors = self.full_projection(pc, intensity, sn, img, seq_i, cam_i)
 
         # TODO: delete? (retries when no points)
         if pc_in_frame.shape[0] == 0:
@@ -344,7 +315,7 @@ class KittiPreprocess:
         print(f' > [Neighbors] original: {pc_in_frame.shape}, {neighbors_indices.shape}')
 
         # Project the 3D neighbourhoods center
-        centers_2D, center_depth_mask, in_image_center_mask = self.get_pc_in_frame(centers_3D.T, img, seq_i, key, K)
+        centers_2D, center_depth_mask, in_image_center_mask = self.project_pointcloud(centers_3D.T, img, seq_i, cam_i)
         centers_2D = np.floor(centers_2D).astype(int)
         centers_2D = centers_2D.T
 
@@ -375,10 +346,10 @@ if __name__ == '__main__':
     )
 
     start_idx = 0
-    for i in range(start_idx, 100, 2):
-        img_folder, pc_folder, K_folder, seq_i, img_i, key = preprocess.dataset[i]
-        img, pc, intensity, sn, K = preprocess.load_item(img_folder, pc_folder, K_folder, img_i)
-        preprocess.get_pc_in_frame(pc, img, seq_i, key, K)
+    for i in range(70, 100):
+        img_folder, pc_folder, seq_i, img_i, cam_i = preprocess.dataset[i]
+        img, pc, intensity, sn = preprocess.load_item(img_folder, pc_folder, img_i)
+        preprocess.project_pointcloud(pc, img, seq_i, cam_i)
 
     # Save preprocessed calib files
     # preprocess.save_calib_files()

@@ -59,10 +59,10 @@ def transform_calib(filedata):
     data['T3'] = T3.dot(data['T0'])
 
     # Compute the camera intrinsics
-    data['K_cam0'] = P_rect_00[0:3, 0:3]
-    data['K_cam1'] = P_rect_10[0:3, 0:3]
-    data['K_cam2'] = P_rect_20[0:3, 0:3]
-    data['K_cam3'] = P_rect_30[0:3, 0:3]
+    data['K0'] = P_rect_00[0:3, 0:3]
+    data['K1'] = P_rect_10[0:3, 0:3]
+    data['K2'] = P_rect_20[0:3, 0:3]
+    data['K3'] = P_rect_30[0:3, 0:3]
 
     return data
 
@@ -81,6 +81,7 @@ def parse_calib_file(filedata):
 
 
 def import_calibs(root, sequences):
+    print(f' > Importing calib file for {len(sequences)} sequences')
     calibs = []
     for seq_i in sequences:
         data = read_calib_file(root, seq_i)

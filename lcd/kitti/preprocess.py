@@ -15,8 +15,8 @@ class KittiPreprocess:
     DATASET_TYPES = Literal["all", "train", "test", "debug"]
     SEQ_LISTS = {
         "all": list(range(11)),
-        "train": list(range(9)), 
-        "test": [9, 10], 
+        "train": list(range(9)),
+        "test": [9, 10],
         "debug": [0]
     }
 
@@ -30,7 +30,7 @@ class KittiPreprocess:
         self.patch_h = patch_h
         self.num_pc = num_pc
         self.min_pc = min_pc
-        
+
         self.dataset = self.make_kitti_dataset()
         self.calib = calib.import_calib(root)
 
@@ -158,7 +158,7 @@ class KittiPreprocess:
         data = np.load(path)
         return data['pc'], data['img'], data['Pi'].item()
 
-    # Storage issue /!\  
+    # Storage issue /!\
     def save_data(self, img_folder, i, pc, img, Pi):
         path = KittiPreprocess.resolve_data_path(img_folder, i)
         logger.info(f'Storing at {path}  - rgb_pc: {pc.shape}, img: {img.shape}')
@@ -168,16 +168,16 @@ class KittiPreprocess:
     def get_samples(self, img_folder):
         samples = 0
         if os.path.exists(img_folder):
-            samples = round(len(os.listdir(img_folder))) 
+            samples = round(len(os.listdir(img_folder)))
         return samples
 
     def store_result(self, seq_i, img_i, pc_in_frame, colors, centers_2D, img, neighbors_indices, Pi):
 
         assert centers_2D.shape[0] == neighbors_indices.shape[0]
-        
+
         img_folder = KittiPreprocess.resolve_img_folder(self.root, seq_i, img_i)
         # nb of samples already preprocessed for this sequence and this image
-        samples = self.get_samples(img_folder) 
+        samples = self.get_samples(img_folder)
 
         for i, indices in enumerate(neighbors_indices):
             center = centers_2D[i]
@@ -229,7 +229,7 @@ class KittiPreprocess:
         # discard the points behind the camera (of negative depth) -- these points get flipped during the z_projection
         depth_mask = ~(depth < 0.1)
         pts_front_cam = pts_cam[depth_mask]
-        
+
         # pts_front_cam = (Pi[:3, :3] @ pc).T #  (Pi[:3, :3] @  [depth_mask]
         # pts_front_cam[:, 0] += img.shape[1] / 2
         # pts_front_cam[:, 1] += img.shape[0] / 2
@@ -261,19 +261,35 @@ class KittiPreprocess:
         total_mask = self.combine_masks(depth_mask, in_image_mask)
         plot_pc = pc.T[total_mask]
         plot_pc[:, 1] += offset
-        # plots.plot_pc(plot_pc, projected_colors)
 
+        import matplotlib.pyplot as plt
+        # # ax[0].imshow(img)
+        plt.figure()
+        plt.imshow(img)
+        plt.show()
+
+        #plots.plot_pc(plot_pc, projected_colors)
+        colors = np.zeros(pc.T.shape) # (M, 3) RGB per point
+        colors[total_mask, :] = projected_colors
+        colors[np.logical_not(total_mask), :] = np.array([109, 125, 141])/255
+        print(colors.shape, total_mask.shape)
+        print(plot_pc.shape, projected_colors.shape)
+
+        plots.plot_pc(pc.T, colors)
+
+
+        """"
         import matplotlib.pyplot as plt
         # # ax[0].imshow(img)
         plt.imshow(img)
         plt.scatter(pts_in_frame_offset[:, 0], pts_in_frame_offset[:, 1], c=z[in_image_mask], cmap='plasma_r', marker=".", s=5)
         plt.colorbar()
-        plt.show()
+        plt.show()"""
 
         return pts_in_frame, depth_mask, in_image_mask
 
     def full_projection(self, pc, intensity, sn, img, seq_i, key, K):
-        
+
         pts_in_frame, depth_mask, in_image_mask = self.get_pc_in_frame(pc, img, seq_i, key, K)
 
         # TODO: add some noise to the color_mask
@@ -322,8 +338,8 @@ class KittiPreprocess:
         # Find neighbors for each point
         neighbors_indices, centers_3D  = downsample_neighbors(ds_pc, pc_in_frame, self.min_pc)
         logger.info(f'[Neighbors] original: {pc_in_frame.shape}, {neighbors_indices.shape}')
-        
-        # Project the 3D neighbourhoods center 
+
+        # Project the 3D neighbourhoods center
         centers_2D, center_depth_mask, in_image_center_mask = self.get_pc_in_frame(centers_3D.T, img, seq_i, key, K)
         centers_2D = np.floor(centers_2D).astype(int)
         centers_2D = centers_2D.T
@@ -338,7 +354,10 @@ class KittiPreprocess:
 
         neighbors_indices = neighbors_indices[inliers_mask]
         centers_3D = centers_3D[inliers_mask]
-       
+
+        plots.plot_imgs(img_i)
+        colors = np.zeros(pc.shape)
+        plots.plot_pc(pc, colors=None)
         self.store_result(seq_i, img_i, pc_in_frame, projected_colors, centers_2D, img, neighbors_indices, Pi=key)
 
 
@@ -356,9 +375,9 @@ if __name__ == '__main__':
         patch_h=h,
         num_pc=num_pc,
         min_pc=min_pc
-    )   
+    )
 
-    # TODO: test.py did not work 
+    # TODO: test.py did not work
     # TODO: offset fails for some image
     # TODO: + different offset for P3
 
@@ -366,9 +385,9 @@ if __name__ == '__main__':
     for i in range(start_idx, 100, 2):
         img_folder, pc_folder, K_folder, seq_i, img_i, key = preprocess.dataset[i]
         img, pc, intensity, sn, K = preprocess.load_item(img_folder, pc_folder, K_folder, img_i)
-        preprocess.get_pc_in_frame(pc, img, seq_i, key, K) 
+        preprocess.get_pc_in_frame(pc, img, seq_i, key, K)
 
-    # Save preprocessed calib files    
+    # Save preprocessed calib files
     # preprocess.save_calib_files()
 
     # Used to preprocess the kitti data and save it to the KittiPreprocess.KITTI_DATA_FOLDER

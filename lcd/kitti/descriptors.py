@@ -19,7 +19,6 @@ def find_descriptors_correspondence(arr_point_descriptors, arr_patch_descriptors
     return corresponding_indexes # corresponding images(nb img neighbours) = arr of indexes inside arr_point_descriptors
 
 
-
 """d = 64                           # dimension
 nb = 100000                      # database size
 nq = 10000                       # nb of queries

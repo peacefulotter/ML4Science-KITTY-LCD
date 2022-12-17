@@ -69,8 +69,8 @@ def transform_calib(filedata):
     return data
 
 def read_calib_file(root, seq_i):
-    file_path = os.path.join(root, 'calib', '%02d' % seq_i, 'calib.txt')
-    # file_path = os.path.join(root, 'sequences', '%02d' % seq_i, 'calib_corr.txt')
+    # file_path = os.path.join(root, 'calib', '%02d' % seq_i, 'calib.txt')
+    file_path = os.path.join(root, 'sequences', '%02d' % seq_i, 'calib_corr.txt')
     print('calib', file_path)
     with open(file_path, 'r') as f:
         return f.readlines()

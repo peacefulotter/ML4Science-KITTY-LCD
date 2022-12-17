@@ -15,16 +15,6 @@ from scipy.sparse import coo_matrix
 from loguru import logger
 
 
-"""
-calib.txt
-
-
-color tests:
-è  
-
-"""
-
-
 class KittiCalibHelper:
     def __init__(self, root_path):
         self.root_path = root_path

@@ -7,7 +7,7 @@ import metrics
 
 class KittiDataset(data.Dataset):
     def __init__(self, root, mode: KittiPreprocess.DATASET_TYPES, *args, **kwargs):
-        super(KittiDataset, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.root = root
         self.seq_list = KittiPreprocess.SEQ_LISTS[mode]
         # self.calibs = self.import_calibs()

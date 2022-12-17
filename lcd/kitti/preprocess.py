@@ -19,7 +19,7 @@ class KittiPreprocess:
         "debug": [0]
     }
 
-    def __init__(self, root, mode: DATASET_TYPES, use_colors=True, patch_w=64, patch_h=64, num_pc=1024, min_pc=32):
+    def __init__(self, root, mode: DATASET_TYPES, patch_w=64, patch_h=64, num_pc=1024, min_pc=32):
         '''
         patch_w: patch image width 
         patch_h: patch image height
@@ -28,7 +28,6 @@ class KittiPreprocess:
         '''
         self.root = root
         self.mode = mode
-        self.use_colors = use_colors
         self.patch_w = patch_w
         self.patch_h = patch_h
         self.num_pc = num_pc
@@ -36,8 +35,7 @@ class KittiPreprocess:
         self.seq_list = KittiPreprocess.SEQ_LISTS[mode]
 
         self.dataset = self.make_kitti_dataset()
-        if use_colors:
-            self.calibs = calib.import_calibs(root, self.seq_list)
+        self.calibs = calib.import_calibs(root, self.seq_list)
 
         print('--------- KittiPreprocess init Done ---------')
 
@@ -136,7 +134,6 @@ class KittiPreprocess:
         img_w, img_h = img.shape[1], img.shape[0]
         o_h = min(max(0, int(h - (self.patch_h / 2))), img_h - self.patch_h)
         o_w = min(max(0, int(w - (self.patch_w / 2))), img_w - self.patch_w)
-        # TODO: neighbors radius should be similar to cropped img w and h ??
         return img[o_h : o_h + self.patch_h, o_w : o_w + self.patch_w]
 
     @staticmethod
@@ -251,8 +248,8 @@ class KittiPreprocess:
         projected_colors = img[ color_mask[:, 1], color_mask[:, 0] ] / 255 # (M, 3) RGB per point
         
         # Get the pointcloud back using the masks indices
-        total_mask = self.combine_masks(depth_mask, in_image_mask)
-        pc_in_frame = pc.T[total_mask]
+        # total_mask = self.combine_masks(depth_mask, in_image_mask)
+        # pc_in_frame = pc.T[total_mask]
         
         # plots.plot_pc(pc_in_frame)
 
@@ -269,15 +266,12 @@ class KittiPreprocess:
         # colors[total_mask, :] = projected_colors
         # colors[np.logical_not(total_mask), :] = np.array([109, 125, 141])/255
 
-        return pts_in_frame, depth_mask, in_image_mask
+        return pts_in_frame, depth_mask, in_image_mask, projected_colors
 
     def full_projection(self, pc, intensity, sn, img, seq_i, cam_i):
 
-        pts_in_frame, depth_mask, in_image_mask = self.project_pointcloud(pc, img, seq_i, cam_i)
+        pts_in_frame, depth_mask, in_image_mask, projected_colors = self.project_pointcloud(pc, img, seq_i, cam_i)
 
-        # TODO: add some noise to the color_mask
-        color_mask = np.floor(pts_in_frame).astype(int)
-        projected_colors = img[ color_mask[:, 1], color_mask[:, 0] ] / 255 # (M, 3) RGB per point
         #pts_in_frame = pts_in_frame*z[in_image_mask]
 
         # Get the pointcloud in its original space
@@ -317,7 +311,7 @@ class KittiPreprocess:
         print(f' > [Neighbors] original: {pc_in_frame.shape}, {neighbors_indices.shape}')
 
         # Project the 3D neighbourhoods center
-        centers_2D, center_depth_mask, in_image_center_mask = self.project_pointcloud(centers_3D.T, img, seq_i, cam_i)
+        centers_2D, center_depth_mask, in_image_center_mask, _ = self.project_pointcloud(centers_3D.T, img, seq_i, cam_i)
         centers_2D = np.floor(centers_2D).astype(int)
         centers_2D = centers_2D.T
 
@@ -343,7 +337,6 @@ if __name__ == '__main__':
     preprocess = KittiPreprocess(
         root=root,
         mode='debug', # TODO: change this to "all"
-        use_colors=True
     )
 
     # start_idx = 0

@@ -3,3 +3,4 @@ sequences/
 calib/
 *.h5
 kitti_data/
+.vscode/

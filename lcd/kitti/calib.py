@@ -32,6 +32,8 @@ def get_p(mat):
 def transform_calib(filedata):
     data = {}
 
+    data['Tr'] = filedata['Tr']
+
     P_rect_00 = np.reshape(filedata['P0'], (3, 4))
     P_rect_10 = np.reshape(filedata['P1'], (3, 4))
     P_rect_20 = np.reshape(filedata['P2'], (3, 4))
@@ -68,6 +70,7 @@ def transform_calib(filedata):
 
 def read_calib_file(root, seq_i):
     file_path = os.path.join(root, 'calib', '%02d' % seq_i, 'calib.txt')
+    # file_path = os.path.join(root, 'sequences', '%02d' % seq_i, 'calib_corr.txt')
     print('calib', file_path)
     with open(file_path, 'r') as f:
         return f.readlines()

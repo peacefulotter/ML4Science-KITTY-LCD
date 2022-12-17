@@ -58,10 +58,3 @@ def plot_pc(pc, colors=None):
     if colors is not None:
         pointcloud.colors = o3d.utility.Vector3dVector(colors)
     o3d.visualization.draw_geometries([pointcloud])
-
-
-def plot_imgs(*imgs):
-    _, axes = plt.subplots(nrows=len(imgs))
-    for i, img in enumerate(imgs):
-        axes[i].imshow(img)
-    plt.show()

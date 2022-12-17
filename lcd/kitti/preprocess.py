@@ -246,13 +246,15 @@ class KittiPreprocess:
         
         # Get the pointcloud back using the masks indices
         total_mask = self.combine_masks(depth_mask, in_image_mask)
-        plot_pc = pc.T[total_mask]
+        pc_in_frame = pc.T[total_mask]
+        
+        plots.plot_pc(pc_in_frame)
+
 
         import matplotlib.pyplot as plt
         plt.figure()
         plt.imshow(img)
         plt.scatter(pts_in_frame[:, 0], pts_in_frame[:, 1], c=z[in_image_mask], cmap='plasma_r', marker=".", s=5)
-        plt.scatter(plot_pc[:, 0], plot_pc[:, 1], plot_pc[:, 2])
         plt.colorbar()
         plt.show()
 
@@ -260,7 +262,7 @@ class KittiPreprocess:
         colors[total_mask, :] = projected_colors
         colors[np.logical_not(total_mask), :] = np.array([109, 125, 141])/255
         print(colors.shape, total_mask.shape)
-        print(plot_pc.shape, projected_colors.shape)
+        print(pc_in_frame.shape, projected_colors.shape)
 
         return pts_in_frame, depth_mask, in_image_mask
 

@@ -39,6 +39,8 @@ class KittiPreprocess:
         if use_colors:
             self.calibs = calib.import_calibs(root, self.seq_list)
 
+        print('--------- KittiPreprocess init Done ---------')
+
 
     def get_dataset_folder(self, seq, name):
         return os.path.join(self.root, 'sequences', '%02d' % seq, name)
@@ -163,10 +165,8 @@ class KittiPreprocess:
         data = np.load(path)
         return data['pc'], data['img'], data['Pi'].item()
 
-    # Storage issue /!\
     def save_data(self, img_folder, i, pc, img, cam_i):
         path = KittiPreprocess.resolve_data_path(img_folder, i)
-        print(f' > Storing at {path}  - rgb_pc: {pc.shape}, img: {img.shape}')
         np.savez(path, pc=pc, img=img, Pi=cam_i)
 
 
@@ -184,7 +184,9 @@ class KittiPreprocess:
         # nb of samples already preprocessed for this sequence and this image
         samples = self.get_samples(img_folder)
 
-        for i, indices in enumerate(neighbors_indices):
+        print(f' > Storing in {img_folder} {len(neighbors_indices)} samples')
+
+        for i, indices in enumerate(neighbors_indices[:100]):
             center = centers_2D[i]
             neighbors_pc = pc_in_frame[indices]
             neighbors_rgb = colors[indices]
@@ -230,8 +232,6 @@ class KittiPreprocess:
         depth_mask = ~(depth < 0.1)
         pts_front_cam = pts_cam[depth_mask]
 
-        print(pts_cam.shape, pts_front_cam.shape)
-
         z = pts_front_cam[:, 2:3]
         pts_on_camera_plane = pts_front_cam / z
 
@@ -255,18 +255,19 @@ class KittiPreprocess:
         pc_in_frame = pc.T[total_mask]
         
         # plots.plot_pc(pc_in_frame)
-        import matplotlib.pyplot as plt
-        plt.figure()
-        plt.imshow(img)
-        plt.scatter(pts_in_frame[:, 0], pts_in_frame[:, 1], c=z[in_image_mask], cmap='plasma_r', marker=".", s=5)
-        plt.colorbar()
-        plt.show()
 
-        colors = np.zeros(pc.T.shape) # (M, 3) RGB per point
-        colors[total_mask, :] = projected_colors
-        colors[np.logical_not(total_mask), :] = np.array([109, 125, 141])/255
-        print(colors.shape, total_mask.shape)
-        print(pc_in_frame.shape, projected_colors.shape)
+
+        # import matplotlib.pyplot as plt
+        # TODO: remove this comment to plot the projected pc on top of the img
+        # plt.figure()
+        # plt.imshow(img)
+        # plt.scatter(pts_in_frame[:, 0], pts_in_frame[:, 1], c=z[in_image_mask], cmap='plasma_r', marker=".", s=5)
+        # plt.colorbar()
+        # plt.show()
+
+        # colors = np.zeros(pc.T.shape) # (M, 3) RGB per point
+        # colors[total_mask, :] = projected_colors
+        # colors[np.logical_not(total_mask), :] = np.array([109, 125, 141])/255
 
         return pts_in_frame, depth_mask, in_image_mask
 
@@ -298,12 +299,14 @@ class KittiPreprocess:
         centers_2D = centers_2D.T[inliers_mask]
         return centers_2D, inliers_mask
 
-    def get_colored_item(self, index, pc, intensity, sn, img, seq_i, cam_i):
-        pc_in_frame, intensity_in_frame, sn_in_frame, projected_colors = self.full_projection(pc, intensity, sn, img, seq_i, cam_i)
 
-        if pc_in_frame.shape[0] == 0:
-            print(' | Not enough points projected, retrying')
-            return self.__getitem__(index)
+    def __getitem__(self, index):
+
+        img_folder, pc_folder, seq_i, img_i, cam_i = self.dataset[index]
+        print(f'--------- Preprocessing {index}  -  seq_i: {seq_i}, img_i: {img_i}, cam_i: {cam_i} ---------')
+
+        img, pc, intensity, sn = self.load_item(img_folder, pc_folder, img_i)
+        pc_in_frame, intensity_in_frame, sn_in_frame, projected_colors = self.full_projection(pc, intensity, sn, img, seq_i, cam_i)
 
         # Voxel Downsample pointcloud
         ds_pc, ds_colors, ds_sn = self.voxel_down_sample(pc_in_frame, intensity_in_frame, sn_in_frame, projected_colors)
@@ -332,13 +335,6 @@ class KittiPreprocess:
         self.store_result(seq_i, img_i, pc_in_frame, projected_colors, centers_2D, img, neighbors_indices, cam_i)
 
 
-    def __getitem__(self, index):
-        img_folder, pc_folder, seq_i, img_i, cam_i = self.dataset[index]
-        img, pc, intensity, sn = self.load_item(img_folder, pc_folder, img_i)
-        print(img.shape, pc.shape, seq_i, img_i, cam_i)
-        if self.use_colors:
-            return self.get_colored_item(index, pc, intensity, sn, img, seq_i, cam_i)
-
 
 if __name__ == '__main__':
 
@@ -350,20 +346,20 @@ if __name__ == '__main__':
         use_colors=True
     )
 
-    start_idx = 0
-    for i in range(30, 72):
-        img_folder, pc_folder, seq_i, img_i, cam_i = preprocess.dataset[i]
-        print(img_i, cam_i)
-        img, pc, intensity, sn = preprocess.load_item(img_folder, pc_folder, img_i)
-        preprocess.project_pointcloud(pc, img, seq_i, cam_i)
+    # start_idx = 0
+    # for i in range(30, 72):
+    #     img_folder, pc_folder, seq_i, img_i, cam_i = preprocess.dataset[i]
+    #     print(img_i, cam_i)
+    #     img, pc, intensity, sn = preprocess.load_item(img_folder, pc_folder, img_i)
+    #     preprocess.project_pointcloud(pc, img, seq_i, cam_i)
 
     # Save preprocessed calib files
+    # TODO: should we really? first figure out the projection
     # preprocess.save_calib_files()
 
     # Used to preprocess the kitti data and save it to the KittiPreprocess.KITTI_DATA_FOLDER
-    # preprocess[1]
-    # for i in range(15):
-    #    preprocess[i]
+    for i in range(100):
+        preprocess[i]
 
     seq_i = 0
     img_i = 2

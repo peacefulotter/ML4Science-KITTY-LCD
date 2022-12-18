@@ -254,13 +254,13 @@ class KittiPreprocess:
         # plots.plot_pc(pc_in_frame)
 
 
-        # import matplotlib.pyplot as plt
         # TODO: remove this comment to plot the projected pc on top of the img
-        # plt.figure()
-        # plt.imshow(img)
-        # plt.scatter(pts_in_frame[:, 0], pts_in_frame[:, 1], c=z[in_image_mask], cmap='plasma_r', marker=".", s=5)
-        # plt.colorbar()
-        # plt.show()
+        import matplotlib.pyplot as plt
+        plt.figure()
+        plt.imshow(img)
+        plt.scatter(pts_in_frame[:, 0], pts_in_frame[:, 1], c=z[in_image_mask], cmap='plasma_r', marker=".", s=5)
+        plt.colorbar()
+        plt.show()
 
         # colors = np.zeros(pc.T.shape) # (M, 3) RGB per point
         # colors[total_mask, :] = projected_colors

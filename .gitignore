@@ -4,3 +4,6 @@ calib/
 *.h5
 kitti_data/
 .vscode/
+*.zip
+*.sh
+raw_kitti/

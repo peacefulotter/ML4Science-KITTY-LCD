@@ -4,21 +4,18 @@ import numpy as np
 
 path = '../poses'
 
-def import_poses(root, seq_i):
-    file_path = os.path.join(root, './poses', '%02d.txt' % seq_i )
-    poses = np.loadtxt(file_path, delimiter=' ')
-    poses = poses.reshape((poses.shape[0], 3, 4))
+def import_poses(root, seq_list):
+    poses = []
+    for seq_i in seq_list:
+        file_path = os.path.join(root, 'poses', '%02d.txt' % seq_i )
+        poses_i = np.loadtxt(file_path, delimiter=' ')
+        poses_i = poses_i.reshape((poses_i.shape[0], 3, 4))
+        poses.append(poses_i)
     return poses
-
-def get_pos(poses, idx):
-    mat = poses[idx]
-    r = mat[:3, :3]
-    t = mat[:, 3]
-    return r, t
+    
 
 if __name__ == '__main__':
     root = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', '..')
     seq_i = 0
     img_i = 0
     poses = import_poses(root, seq_i)
-    get_pos(poses, img_i)

@@ -2,16 +2,14 @@
 import os
 import numpy as np
 import open3d as o3d
-from typing import Literal
 
-from pointcloud import downsample_neighbors
-import calib
-import plots
+from .pointcloud import downsample_neighbors
+from .calib import import_calibs
 
 class KittiPreprocess:
 
     KITTI_DATA_FOLDER = 'kitti_data'
-    DATASET_TYPES = Literal["all", "train", "test", "debug"]
+    MODES = ["all", "train", "test", "debug"]
     SEQ_LISTS = {
         "all": list(range(11)),
         "train": list(range(9)),
@@ -19,13 +17,16 @@ class KittiPreprocess:
         "debug": [0]
     }
 
-    def __init__(self, root, mode: DATASET_TYPES, patch_w=64, patch_h=64, num_pc=1024, min_pc=32):
+    def __init__(self, root, mode, patch_w=64, patch_h=64, num_pc=1024, min_pc=32):
         '''
         patch_w: patch image width 
         patch_h: patch image height
         num_pc: number of points in each pointcloud
         min_pc: mininum number of points in a neighborhood, if less discard
         '''
+        if mode not in KittiPreprocess.MODES:
+            raise Exception('mode parameter should be one of ' + str(KittiPreprocess.MODES))
+
         self.root = root
         self.mode = mode
         self.patch_w = patch_w
@@ -35,9 +36,9 @@ class KittiPreprocess:
         self.seq_list = KittiPreprocess.SEQ_LISTS[mode]
 
         self.dataset = self.make_kitti_dataset()
-        self.calibs = calib.import_calibs(root, self.seq_list)
+        self.calibs = import_calibs(root, self.seq_list)
 
-        print('--------- KittiPreprocess init Done ---------')
+        print('--------- KittiPreprocess  init Done ---------')
 
 
     def get_dataset_folder(self, seq, name):
@@ -79,15 +80,7 @@ class KittiPreprocess:
         return img, pc, intensity, sn
 
     def __len__(self):
-        return len(self.dataset)
-
-    # TODO: delete or move to plots
-    def display_points_in_image(self, depth_mask, in_frame_mask, pc):
-        total_mask = self.combine_masks(depth_mask, in_frame_mask)
-        colors = np.zeros(pc.shape)
-        colors[1, total_mask] = 190/255 # highlight selected points in green
-        colors[2, ~total_mask] = 120/255 # highlight unselected points in blue
-        plots.plot_pc(pc.T, colors.T)
+        return len(self.dataset) 
 
     #Combine sequential masks: where the second mask is used after the first one
     def combine_masks(self, depth_mask, in_frame_mask):
@@ -255,12 +248,12 @@ class KittiPreprocess:
 
 
         # TODO: remove this comment to plot the projected pc on top of the img
-        import matplotlib.pyplot as plt
-        plt.figure()
-        plt.imshow(img)
-        plt.scatter(pts_in_frame[:, 0], pts_in_frame[:, 1], c=z[in_image_mask], cmap='plasma_r', marker=".", s=5)
-        plt.colorbar()
-        plt.show()
+        # import matplotlib.pyplot as plt
+        # plt.figure()
+        # plt.imshow(img)
+        # plt.scatter(pts_in_frame[:, 0], pts_in_frame[:, 1], c=z[in_image_mask], cmap='plasma_r', marker=".", s=5)
+        # plt.colorbar()
+        # plt.show()
 
         # colors = np.zeros(pc.T.shape) # (M, 3) RGB per point
         # colors[total_mask, :] = projected_colors

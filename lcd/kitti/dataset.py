@@ -2,11 +2,10 @@ import os
 import numpy as np
 import torch.utils.data as data
 
-from preprocess import KittiPreprocess
-import metrics
+from .preprocess import KittiPreprocess
 
 class KittiDataset(data.Dataset):
-    def __init__(self, root, mode: KittiPreprocess.DATASET_TYPES, *args, **kwargs):
+    def __init__(self, root, mode, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.root = root
         self.seq_list = KittiPreprocess.SEQ_LISTS[mode]

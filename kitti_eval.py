@@ -1,16 +1,13 @@
 import os
 import json
-import datetime
-import numpy as np
 import torch
-import torch.optim as optim
 import torch.utils.data as data
-from collections import defaultdict
 
 from lcd.models import *
 from lcd.losses import *
 
-from lcd.kitti.dataset import KittiDataset
+from lcd.kitti.eval_dataset import KittiEvalDataset
+from lcd.descriptors import find_descriptors_correspondence
 
 def main():
 
@@ -28,11 +25,11 @@ def main():
 
     device = 'cuda' if args["device"] == 'cuda' and torch.cuda.is_available() else 'cpu'
 
-    dataset = KittiDataset(args["root"], mode="test")
+    dataset = KittiEvalDataset(args["root"])
     loader = data.DataLoader(
         dataset,
-        batch_size=args["batch_size"],
-        num_workers=args["num_workers"],
+        batch_size=2, # args["batch_size"],
+        num_workers=1, # args["num_workers"],
         pin_memory=True,
         shuffle=True,
     )
@@ -48,13 +45,17 @@ def main():
     pointnet.to(device)
 
     for i, batch in enumerate(loader):
-        x = [x.to(device) for x in batch]
-        y0, z0 = pointnet(x[0])
-        y1, z1 = patchnet(x[1])
-
+        print(f'[{i}] Forwading to model')
+        print(batch[0].shape, batch[1].shape)
+        x = [torch.flatten(x, end_dim=1).to(device) for x in batch]
         print(x[0].shape, x[1].shape)
-        print(y0.shape, z0.shape)
-        print(y1.shape, z1.shape)
+        _, z0 = pointnet(x[0])
+        _, z1 = patchnet(x[1])
+
+        print(f'[{i}] Establishing descriptor correspondences')
+        correspondences = find_descriptors_correspondence(z0[:100], z1[:100])
+        print(correspondences.shape)
+        print(correspondences)
         # R, t = rigid_transform_3D(A, B)
         
     print(' > Done')

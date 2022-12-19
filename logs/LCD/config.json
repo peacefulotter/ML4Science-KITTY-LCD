@@ -1,5 +1,5 @@
 {
-    "root": "data",
+    "root": "./",
     "device": "cuda",
     "epochs": 250,
     "batch_size": 64,

@@ -66,12 +66,12 @@ class KittiPreprocess:
                 dataset.append((img3_folder, pc_folder, seq_i, img_i, 3))
         return dataset
 
-    def load_npy(self, folder, seq_i):
-        return np.load(os.path.join(folder, '%06d.npy' % seq_i))
+    def load_npy(self, folder, img_i):
+        return np.load(os.path.join(folder, '%06d.npy' % img_i))
 
-    def load_item(self, img_folder, pc_folder, seq_i):
-        img = self.load_npy(img_folder, seq_i)
-        data = self.load_npy(pc_folder, seq_i)
+    def load_item(self, img_folder, pc_folder, img_i):
+        img = self.load_npy(img_folder, img_i)
+        data = self.load_npy(pc_folder, img_i)
         # K = self.load_npy(K_folder, seq_i)
         pc = data[0:3, :]
         intensity = data[3:4, :]

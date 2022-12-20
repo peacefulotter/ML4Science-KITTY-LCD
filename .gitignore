@@ -8,3 +8,4 @@ kitti_data/
 *.sh
 raw_kitti/
 raw/
+.DS_Store

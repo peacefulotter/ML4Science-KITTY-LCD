@@ -1,4 +1,3 @@
-
 import os
 import numpy as np
 import open3d as o3d
@@ -7,12 +6,15 @@ from .pointcloud import downsample_neighbors
 from .projection import project, project_kitti
 from .calib import import_calibs
 
+from argparse import ArgumentParser
+argparser = ArgumentParser()
+argparser.add_argument("--mode", choices=["debug", "all"], default="debug")
+
 class KittiPreprocess:
 
     KITTI_DATA_FOLDER = 'kitti_data'
-    MODES = ["all", "train", "test", "debug"]
     SEQ_LISTS = {
-        "all": list(range(11)),
+        "all": list(range(1)),
         "train": list(range(9)),
         "test": [9, 10],
         "debug": [0]
@@ -54,7 +56,7 @@ class KittiPreprocess:
             key, # key=(P2 or P3)
         '''
         dataset = []
-        print(f' > Dataset consists of {self.seq_list} sequences')
+        print(f" Dataset consists of {self.seq_list} sequences ")
         for seq_i in self.seq_list:
             img2_folder = self.get_dataset_folder(seq_i, 'img_P2')
             img3_folder = self.get_dataset_folder(seq_i, 'img_P3')
@@ -138,6 +140,17 @@ class KittiPreprocess:
         return data['pc'], data['img'], data['Pi'].item()
 
     def save_data(self, img_folder, i, pc, img, cam_i):
+        if self.mode == "all":
+            seq_dir, img_dir = os.path.split(img_folder)[-2:]
+            print("output: ", end=" ")
+            img_folder = os.path.join(os.path.expandvars("$SCRATCH"), "kitti", seq_dir, img_dir)
+            print(img_folder)
+            os.makedirs(img_folder, exist_ok=True)
+        elif self.mode == "debug":
+            pass
+        else:
+            raise ValueError(f"mode {self.mode} unsupported")
+
         path = KittiPreprocess.resolve_data_path(img_folder, i)
         np.savez(path, pc=pc, img=img, Pi=cam_i)
 
@@ -235,12 +248,13 @@ class KittiPreprocess:
 
 
 if __name__ == '__main__':
+    args = argparser.parse_args()
 
     root = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', '..')
     print(f' > Loading from root: {root}')
     preprocess = KittiPreprocess(
         root=root,
-        mode='debug', # TODO: change this to "all"
+        mode=args.mode,  # depends on program argument, default to "arg"
     )
 
     # start_idx = 0
@@ -255,7 +269,7 @@ if __name__ == '__main__':
     # preprocess.save_calib_files()
 
     # Used to preprocess the kitti data and save it to the KittiPreprocess.KITTI_DATA_FOLDER
-    for i in range(100):
+    for i in range(0, len(preprocess), 2):
         preprocess[i]
 
     seq_i = 0

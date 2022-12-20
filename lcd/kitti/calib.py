@@ -32,7 +32,7 @@ def get_p(mat):
 def transform_calib(filedata):
     data = {}
 
-    data['Tr'] = filedata['Tr']
+    # data['Tr'] = filedata['Tr']
 
     P_rect_00 = np.reshape(filedata['P0'], (3, 4))
     P_rect_10 = np.reshape(filedata['P1'], (3, 4))

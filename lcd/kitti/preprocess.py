@@ -1,20 +1,16 @@
 import os
 import numpy as np
-import open3d as o3d
+# import open3d as o3d
 
 from .pointcloud import downsample_neighbors
 from .projection import project, project_kitti
 from .calib import import_calibs
 
-from argparse import ArgumentParser
-argparser = ArgumentParser()
-argparser.add_argument("--mode", choices=["debug", "all"], default="debug")
-
 class KittiPreprocess:
 
     KITTI_DATA_FOLDER = 'kitti_data'
     SEQ_LISTS = {
-        "all": list(range(1)),
+        "all": list(range(11)),
         "train": list(range(9)),
         "test": [9, 10],
         "debug": [0]
@@ -248,6 +244,10 @@ class KittiPreprocess:
 
 
 if __name__ == '__main__':
+
+    from argparse import ArgumentParser
+    argparser = ArgumentParser()
+    argparser.add_argument("--mode", choices=["debug", "all"], default="debug")
     args = argparser.parse_args()
 
     root = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', '..')
@@ -256,13 +256,6 @@ if __name__ == '__main__':
         root=root,
         mode=args.mode,  # depends on program argument, default to "arg"
     )
-
-    # start_idx = 0
-    # for i in range(30, 72):
-    #     img_folder, pc_folder, seq_i, img_i, cam_i = preprocess.dataset[i]
-    #     print(img_i, cam_i)
-    #     img, pc, intensity, sn = preprocess.load_item(img_folder, pc_folder, img_i)
-    #     preprocess.project_pointcloud(pc, img, seq_i, cam_i)
 
     # Save preprocessed calib files
     # TODO: should we really? first figure out the projection

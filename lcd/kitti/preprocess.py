@@ -1,25 +1,26 @@
-
 import os
 import numpy as np
-import open3d as o3d
-from typing import Literal
+# import open3d as o3d
 
 from pointcloud import downsample_neighbors
 import calib
 import plots
 
+from argparse import ArgumentParser
+argparser = ArgumentParser()
+argparser.add_argument("--mode", choices=["debug", "all"], default="debug")
+
 class KittiPreprocess:
 
     KITTI_DATA_FOLDER = 'kitti_data'
-    DATASET_TYPES = Literal["all", "train", "test", "debug"]
     SEQ_LISTS = {
-        "all": list(range(11)),
+        "all": list(range(1)),
         "train": list(range(9)),
         "test": [9, 10],
         "debug": [0]
     }
 
-    def __init__(self, root, mode: DATASET_TYPES, patch_w=64, patch_h=64, num_pc=1024, min_pc=32):
+    def __init__(self, root, mode, patch_w=64, patch_h=64, num_pc=1024, min_pc=32):
         '''
         patch_w: patch image width 
         patch_h: patch image height
@@ -52,7 +53,7 @@ class KittiPreprocess:
             key, # key=(P2 or P3)
         '''
         dataset = []
-        print(f' > Dataset consists of {self.seq_list} sequences')
+        print(f" Dataset consists of {self.seq_list} sequences ")
         for seq_i in self.seq_list:
             img2_folder = self.get_dataset_folder(seq_i, 'img_P2')
             img3_folder = self.get_dataset_folder(seq_i, 'img_P3')
@@ -101,6 +102,8 @@ class KittiPreprocess:
 
     # voxel_grid_size not to lose too much info up
     def voxel_down_sample(self, pc, intensity, sn, colors, voxel_grid_size=.1):
+        return pc, colors, sn
+
         # TODO: use intensity?
         max_intensity = np.max(intensity)
         # colors = intensity / max_intensity   # colors *
@@ -119,6 +122,7 @@ class KittiPreprocess:
         down_pcd_sn = np.asarray(down_pcd.normals)
 
         # down_pcd_colors *= max_intensity
+
 
         return down_pcd_points, down_pcd_colors, down_pcd_sn
 
@@ -163,6 +167,17 @@ class KittiPreprocess:
         return data['pc'], data['img'], data['Pi'].item()
 
     def save_data(self, img_folder, i, pc, img, cam_i):
+        if self.mode == "all":
+            seq_dir, img_dir = os.path.split(img_folder)[-2:]
+            print("output: ", end=" ")
+            img_folder = os.path.join(os.path.expandvars("$SCRATCH"), "kitti", seq_dir, img_dir)
+            print(img_folder)
+            os.makedirs(img_folder, exist_ok=True)
+        elif self.mode == "debug":
+            pass
+        else:
+            raise ValueError(f"mode {self.mode} unsupported")
+
         path = KittiPreprocess.resolve_data_path(img_folder, i)
         np.savez(path, pc=pc, img=img, Pi=cam_i)
 
@@ -253,14 +268,12 @@ class KittiPreprocess:
         
         # plots.plot_pc(pc_in_frame)
 
-
-        # TODO: remove this comment to plot the projected pc on top of the img
-        import matplotlib.pyplot as plt
-        plt.figure()
-        plt.imshow(img)
-        plt.scatter(pts_in_frame[:, 0], pts_in_frame[:, 1], c=z[in_image_mask], cmap='plasma_r', marker=".", s=5)
-        plt.colorbar()
-        plt.show()
+        # import matplotlib.pyplot as plt
+        # plt.figure()
+        # plt.imshow(img)
+        # plt.scatter(pts_in_frame[:, 0], pts_in_frame[:, 1], c=z[in_image_mask], cmap='plasma_r', marker=".", s=5)
+        # plt.colorbar()
+        # plt.show()
 
         # colors = np.zeros(pc.T.shape) # (M, 3) RGB per point
         # colors[total_mask, :] = projected_colors
@@ -331,12 +344,13 @@ class KittiPreprocess:
 
 
 if __name__ == '__main__':
+    args = argparser.parse_args()
 
     root = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', '..')
     print(f' > Loading from root: {root}')
     preprocess = KittiPreprocess(
         root=root,
-        mode='debug', # TODO: change this to "all"
+        mode=args.mode,  # depends on program argument, default to "arg"
     )
 
     # start_idx = 0
@@ -351,7 +365,7 @@ if __name__ == '__main__':
     # preprocess.save_calib_files()
 
     # Used to preprocess the kitti data and save it to the KittiPreprocess.KITTI_DATA_FOLDER
-    for i in range(100):
+    for i in range(0, len(preprocess), 2):
         preprocess[i]
 
     seq_i = 0

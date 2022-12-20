@@ -70,7 +70,6 @@ def transform_calib(filedata):
 
 def read_calib_file(root, seq_i):
     # file_path = os.path.join(root, 'calib', '%02d' % seq_i, 'calib.txt')
-    # file_path = os.path.join(root, 'sequences', '%02d' % seq_i, 'calib_corr.txt')
     file_path = os.path.join(root, 'sequences', '%02d' % seq_i, 'calib.txt')
     with open(file_path, 'r') as f:
         return f.readlines()
@@ -81,6 +80,28 @@ def parse_calib_file(filedata):
         key, mat = extract_key_mat(line)
         res[key] = mat
     return res
+
+def import_velo_to_cam(root):
+    file_path = os.path.join(root, 'calib_velo_to_cam.txt')
+    with open(file_path, 'r') as f:
+        lines = f.readlines()
+        lines = np.array(lines[1:3])
+        R = np.fromstring(lines[0][3:], sep=' ')
+        t = np.fromstring(lines[1][3:], sep=' ')
+        R = R.reshape((3, 3))
+        t = t.reshape((3, 1))
+        return np.hstack((R, t))
+
+def import_cam_to_cam(root):
+    file_path = os.path.join(root, 'calib_cam_to_cam.txt')
+    with open(file_path, 'r') as f:
+        lines = f.readlines()
+        lines = lines[2:]
+        data = {}
+        for line in lines:
+            key, mat = line.split(':')
+            data[key] = np.fromstring(mat, sep=' ')
+        return data
 
 
 def import_calibs(root, sequences):

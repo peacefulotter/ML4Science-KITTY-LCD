@@ -58,3 +58,10 @@ def plot_pc(pc, colors=None):
     if colors is not None:
         pointcloud.colors = o3d.utility.Vector3dVector(colors)
     o3d.visualization.draw_geometries([pointcloud])
+
+def display_points_in_image(self, depth_mask, in_frame_mask, pc):
+    total_mask = self.combine_masks(depth_mask, in_frame_mask)
+    colors = np.zeros(pc.shape)
+    colors[1, total_mask] = 190/255 # highlight selected points in green
+    colors[2, ~total_mask] = 120/255 # highlight unselected points in blue
+    plots.plot_pc(pc.T, colors.T)

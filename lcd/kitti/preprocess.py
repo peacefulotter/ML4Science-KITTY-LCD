@@ -2,9 +2,8 @@ import os
 import numpy as np
 # import open3d as o3d
 
-from pointcloud import downsample_neighbors
-import calib
-import plots
+from .pointcloud import downsample_neighbors
+from .calib import import_calibs
 
 from argparse import ArgumentParser
 argparser = ArgumentParser()
@@ -27,6 +26,9 @@ class KittiPreprocess:
         num_pc: number of points in each pointcloud
         min_pc: mininum number of points in a neighborhood, if less discard
         '''
+        if mode not in KittiPreprocess.MODES:
+            raise Exception('mode parameter should be one of ' + str(KittiPreprocess.MODES))
+
         self.root = root
         self.mode = mode
         self.patch_w = patch_w
@@ -36,9 +38,9 @@ class KittiPreprocess:
         self.seq_list = KittiPreprocess.SEQ_LISTS[mode]
 
         self.dataset = self.make_kitti_dataset()
-        self.calibs = calib.import_calibs(root, self.seq_list)
+        self.calibs = import_calibs(root, self.seq_list)
 
-        print('--------- KittiPreprocess init Done ---------')
+        print('--------- KittiPreprocess  init Done ---------')
 
 
     def get_dataset_folder(self, seq, name):
@@ -67,12 +69,12 @@ class KittiPreprocess:
                 dataset.append((img3_folder, pc_folder, seq_i, img_i, 3))
         return dataset
 
-    def load_npy(self, folder, seq_i):
-        return np.load(os.path.join(folder, '%06d.npy' % seq_i))
+    def load_npy(self, folder, img_i):
+        return np.load(os.path.join(folder, '%06d.npy' % img_i))
 
-    def load_item(self, img_folder, pc_folder, seq_i):
-        img = self.load_npy(img_folder, seq_i)
-        data = self.load_npy(pc_folder, seq_i)
+    def load_item(self, img_folder, pc_folder, img_i):
+        img = self.load_npy(img_folder, img_i)
+        data = self.load_npy(pc_folder, img_i)
         # K = self.load_npy(K_folder, seq_i)
         pc = data[0:3, :]
         intensity = data[3:4, :]
@@ -80,15 +82,7 @@ class KittiPreprocess:
         return img, pc, intensity, sn
 
     def __len__(self):
-        return len(self.dataset)
-
-    # TODO: delete or move to plots
-    def display_points_in_image(self, depth_mask, in_frame_mask, pc):
-        total_mask = self.combine_masks(depth_mask, in_frame_mask)
-        colors = np.zeros(pc.shape)
-        colors[1, total_mask] = 190/255 # highlight selected points in green
-        colors[2, ~total_mask] = 120/255 # highlight unselected points in blue
-        plots.plot_pc(pc.T, colors.T)
+        return len(self.dataset) 
 
     #Combine sequential masks: where the second mask is used after the first one
     def combine_masks(self, depth_mask, in_frame_mask):

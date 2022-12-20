@@ -38,7 +38,7 @@ if __name__ == '__main__':
 
 
     Pi = calib['P2']
-    # Pi = get_p(Pi)
+    Pi = get_p(Pi)
 
     k, r, t, _, _, _, _ = cv2.decomposeProjectionMatrix(Pi)
     t = t / t[3]
@@ -47,53 +47,67 @@ if __name__ == '__main__':
 
     for i in range(pc.shape[1]):
         point = pc[:, i]
-        point_homogeneous = np.append(point, 1)
-        point_2d = np.matmul(Pi, point_homogeneous)
-        point_2d = point_2d[:2] / point_2d[2]
-        point_2d = np.floor(point_2d).astype(int)
-        u, v = point_2d
+        x, y, z = point
+        fx = Pi[0, 0]
+        fy = Pi[1, 1]
+        cx = Pi[0, 2]
+        cy = Pi[1, 2]
+        u = fx * x / z + cx
+        v = fy * y / z + cy
+        print(u, v)
+        # point_homogeneous = np.append(point, 1)
+        # point_2d = np.matmul(Pi, point_homogeneous)
+        # point_2d = point_2d[:2] / point_2d[2]
+        # point_2d /= 100
+        # point_2d = np.floor(point_2d).astype(int)
+        # u, v = point_2d
         if u >= 0 and u < img_h and v >= 0 and v < img_w:
             print(i)
             print(point)
-            print(point_2d)
+            print(u, v)
         if u >= 0 and u < img_w and v >= 0 and v < img_h:
-            print(i)
+            print(i, "second")
             print(point)
-            print(point_2d)
+            print(u, v)
 
-    pc_ext = np.r_[ pc, np.ones((1,pc.shape[1])) ]
-    # pts_cam = (Pi @ pc_ext)[:3, :].T
-    pts_cam = (k @ Rt @ pc_ext)[:3, :].T
+    pc_homogeneous = np.r_[ pc, np.ones((1,pc.shape[1])) ]
+    pts_2d_homogeneous = (Pi @ pc_homogeneous)
+    # pts_cam = (k @ Rt @ pc_ext)[:3, :].T
 
-    depth = pts_cam[:, 2]
-    depth_mask = ~(depth < 0.1)
-    pts_front_cam = pts_cam[depth_mask]
+    # depth = pts_cam[:, 2]
+    # depth_mask = ~(depth < 0.1)
+    # pts_front_cam = pts_cam[depth_mask]
 
-    z = pts_front_cam[:, 2:3]
-    pts_on_camera_plane = pts_front_cam / z
+    # z = pts_front_cam[:, 2:3]
+    # pts_on_camera_plane = pts_front_cam / z
+    z = pts_2d_homogeneous[2]
+    pts_2d = pts_2d_homogeneous[:2] / z
+    pts_2d /= 100
+
 
     # take the points falling inside the image
+    pixels = np.floor(pts_2d).astype(int)
+    u, v = pixels
     in_image_mask = (
-        (pts_on_camera_plane[:, 0] >= 0) &
-        (pts_on_camera_plane[:, 0] < img_h) &
-        (pts_on_camera_plane[:, 1] >= 0) &
-        (pts_on_camera_plane[:, 1] < img_w)
+        (u >= 0) & (u < img_h) &
+        (v >= 0) & (v < img_w)
     )
-    pts_in_frame = pts_on_camera_plane[in_image_mask]
+    pixel_in_frame = pixels[:, in_image_mask]
+
+    print(pixel_in_frame.T)
 
     # Get RGB for each point on the image
-    color_mask = np.floor(pts_in_frame).astype(int)
-    projected_colors = img[ color_mask[:, 1], color_mask[:, 0] ] / 255 # (M, 3) RGB per point
+    # projected_colors = img[ pixel_in_frame[1], pixel_in_frame[0] ] / 255 # (M, 3) RGB per point
     
     # Get the pointcloud back using the masks indices
-    total_mask = combine_masks(depth_mask, in_image_mask)
-    pc_in_frame = pc.T[total_mask]
+    # total_mask = combine_masks(depth_mask, in_image_mask)
+    pc_in_frame = pc.T[in_image_mask]
     
     print(pc_in_frame.shape)
     # plot_pc(pc_in_frame)
 
-    plt.figure()
+    plt.figure(figsize=(16, 8))
     plt.imshow(img)
-    plt.scatter(pts_in_frame[:, 0], pts_in_frame[:, 1], c=z[in_image_mask], cmap='plasma_r', marker=".", s=5)
+    plt.scatter(pixel_in_frame[1], pixel_in_frame[0], c=z[in_image_mask], cmap='plasma_r', marker=".", s=5)
     plt.colorbar()
     plt.show()

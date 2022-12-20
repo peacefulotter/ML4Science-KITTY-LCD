@@ -7,3 +7,4 @@ kitti_data/
 *.zip
 *.sh
 raw_kitti/
+raw/

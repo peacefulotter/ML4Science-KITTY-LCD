@@ -15,5 +15,9 @@
     "weight_decay": 0.0005,
     "alpha": 1.0,
     "beta": 1.0,
-    "gamma": 1.0
+    "gamma": 1.0,
+    "patch_w": 64,
+    "patch_h": 64,
+    "min_pc": 32,
+    "num_pc": 1024
 }

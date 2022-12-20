@@ -32,16 +32,31 @@ def RTE(Tt, Te):
     '''
     return np.linalg.norm(Tt - Te)
 
+def patch_coordinates(origin, patch_size):
+    o_h, o_w = origin
+    patch_h, patch_w = patch_size
+    y = np.arange(o_h, o_h + patch_h)
+    x = np.arange(o_w, o_w + patch_w)
+    g = np.meshgrid(y, x) # TODO
+    img = np.vstack(map(np.ravel, g)).T
+    return img.astype(float)
+
 @torch.no_grad()
-def get_pose(pc, img, K, dist_thres=5): # 5 pixels
+def get_pose(pc, K, origin, patch_size, dist_thres=5): # 5 pixels
     pc = pc.cpu().detach().numpy().astype(float)
-    img = img.cpu().detach().numpy().astype(float)
-    K = K.cpu().detach().numpy().astype(float)
-    print(pc.dtype, img.dtype, K.dtype)
+    pc = pc[:, :3] # keep only xyz
+    img = patch_coordinates(origin, patch_size)
+    print(pc.shape, pc.dtype)
+    print(img.shape, img.dtype)
+
+    img = img[:1024]
+
     _, R, t, _ = cv2.solvePnPRansac(
-        pc, img, K, 
-        # useExtrinsicGuess=False,
-        # iterationsCount=500, 
+        objectPoints=pc, 
+        imagePoints=img, 
+        cameraMatrix=K, 
+        useExtrinsicGuess=False,
+        iterationsCount=500, 
         reprojectionError=dist_thres, 
         flags=cv2.SOLVEPNP_EPNP, 
         distCoeffs=None
@@ -49,6 +64,6 @@ def get_pose(pc, img, K, dist_thres=5): # 5 pixels
     R, _ = cv2.Rodrigues(R) # Converts rotation vector to matrix
     return R, t
 
-def get_errors(pc, img, K, Rt, Tt, dist_thres=5):
-    Re, Te = get_pose(pc, img, K, dist_thres)
+def get_errors(pc, origin, patch_size, K, Rt, Tt, dist_thres=5):
+    Re, Te = get_pose(pc, K, origin, patch_size, dist_thres)
     return RRE(Rt, Re), RTE(Tt, Te)

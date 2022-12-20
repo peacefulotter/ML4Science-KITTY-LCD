@@ -1,5 +1,6 @@
 import numpy as np
 import open3d as o3d
+import matplotlib.pyplot as plt
 
 colors = [
     [0.2, 0.2, 1],
@@ -54,9 +55,15 @@ def plot_pc(pc, colors=None):
         pointcloud.colors = o3d.utility.Vector3dVector(colors)
     o3d.visualization.draw_geometries([pointcloud])
 
-def display_points_in_image(self, depth_mask, in_frame_mask, pc):
-    total_mask = self.combine_masks(depth_mask, in_frame_mask)
+def display_points_in_image(total_mask, pc):
     colors = np.zeros(pc.shape)
     colors[1, total_mask] = 190/255 # highlight selected points in green
     colors[2, ~total_mask] = 120/255 # highlight unselected points in blue
-    plots.plot_pc(pc.T, colors.T)
+    plot_pc(pc.T, colors.T)
+
+def plot_img_against_pc(img, pts_in_frame, z):
+    plt.figure()
+    plt.imshow(img)
+    plt.scatter(pts_in_frame[:, 0], pts_in_frame[:, 1], c=z, cmap='plasma_r', marker=".", s=5)
+    plt.colorbar()
+    plt.show()

@@ -4,6 +4,7 @@ import numpy as np
 import open3d as o3d
 
 from .pointcloud import downsample_neighbors
+from .projection import project, project_kitti
 from .calib import import_calibs
 
 class KittiPreprocess:
@@ -82,25 +83,8 @@ class KittiPreprocess:
     def __len__(self):
         return len(self.dataset) 
 
-    #Combine sequential masks: where the second mask is used after the first one
-    def combine_masks(self, depth_mask, in_frame_mask):
-        mask = np.zeros(depth_mask.shape)
-        idx_in_frame = 0
-        for idx_depth, depth in enumerate(depth_mask):
-            if depth:
-                mask[idx_depth] = in_frame_mask[idx_in_frame]
-                idx_in_frame += 1
-        return mask.astype(bool)
-
     # voxel_grid_size not to lose too much info up
-    def voxel_down_sample(self, pc, intensity, sn, colors, voxel_grid_size=.1):
-        # TODO: use intensity?
-        max_intensity = np.max(intensity)
-        # colors = intensity / max_intensity   # colors *
-
-        # colors=np.zeros((pc.shape[0],3))
-        # colors[:,0:1]= intensity /max_intensity
-
+    def voxel_down_sample(self, pc, sn, colors, voxel_grid_size=.1):
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(pc)
         pcd.colors = o3d.utility.Vector3dVector(colors)
@@ -110,8 +94,6 @@ class KittiPreprocess:
         down_pcd_points = np.asarray(down_pcd.points)
         down_pcd_colors = np.asarray(down_pcd.colors)
         down_pcd_sn = np.asarray(down_pcd.normals)
-
-        # down_pcd_colors *= max_intensity
 
         return down_pcd_points, down_pcd_colors, down_pcd_sn
 
@@ -159,7 +141,6 @@ class KittiPreprocess:
         path = KittiPreprocess.resolve_data_path(img_folder, i)
         np.savez(path, pc=pc, img=img, Pi=cam_i)
 
-
     def get_samples(self, img_folder):
         samples = 0
         if os.path.exists(img_folder):
@@ -205,76 +186,6 @@ class KittiPreprocess:
             print(f" > Saving calib file {seq_i} to {path}")
             np.savez(path, P2=res['P2'], P3=res['P3'])
 
-
-    def project_pointcloud(self, pc, img, seq_i, cam_i):
-
-        # Get Pi and Ti from the calib file
-        calib = self.calibs[seq_i]
-        Pi = calib[f'P{cam_i}']
-        Ti = calib[f'T{cam_i}'] # {cam_i}
-
-        # Project onto the image
-        pc_ext = np.r_[ pc, np.ones((1,pc.shape[1])) ]
-        pts_cam = (Pi @ Ti @ pc_ext)[:3, :].T
-
-        # discard the points behind the camera (of negative depth) -- these points get flipped during the z_projection
-        depth = pts_cam[:, 2]
-        depth_mask = ~(depth < 0.1)
-        pts_front_cam = pts_cam[depth_mask]
-
-        z = pts_front_cam[:, 2:3]
-        pts_on_camera_plane = pts_front_cam / z
-
-        pts_on_camera_plane[:, 1] = pts_on_camera_plane[:, 1] - img.shape[0] / 6
-
-        # take the points falling inside the image
-        in_image_mask = (
-            (pts_on_camera_plane[:, 0] >= 0) &
-            (pts_on_camera_plane[:, 0] < img.shape[1]) &
-            (pts_on_camera_plane[:, 1] >= 0) &
-            (pts_on_camera_plane[:, 1] < img.shape[0])
-        )
-        pts_in_frame = pts_on_camera_plane[in_image_mask]
-
-        # Get RGB for each point on the image
-        color_mask = np.floor(pts_in_frame).astype(int)
-        projected_colors = img[ color_mask[:, 1], color_mask[:, 0] ] / 255 # (M, 3) RGB per point
-        
-        # Get the pointcloud back using the masks indices
-        # total_mask = self.combine_masks(depth_mask, in_image_mask)
-        # pc_in_frame = pc.T[total_mask]
-        
-        # plots.plot_pc(pc_in_frame)
-
-
-        # TODO: remove this comment to plot the projected pc on top of the img
-        # import matplotlib.pyplot as plt
-        # plt.figure()
-        # plt.imshow(img)
-        # plt.scatter(pts_in_frame[:, 0], pts_in_frame[:, 1], c=z[in_image_mask], cmap='plasma_r', marker=".", s=5)
-        # plt.colorbar()
-        # plt.show()
-
-        # colors = np.zeros(pc.T.shape) # (M, 3) RGB per point
-        # colors[total_mask, :] = projected_colors
-        # colors[np.logical_not(total_mask), :] = np.array([109, 125, 141])/255
-
-        return pts_in_frame, depth_mask, in_image_mask, projected_colors
-
-    def full_projection(self, pc, intensity, sn, img, seq_i, cam_i):
-
-        pts_in_frame, depth_mask, in_image_mask, projected_colors = self.project_pointcloud(pc, img, seq_i, cam_i)
-
-        #pts_in_frame = pts_in_frame*z[in_image_mask]
-
-        # Get the pointcloud in its original space
-        total_mask = self.combine_masks(depth_mask, in_image_mask)
-        pc_in_frame = pc.T[total_mask]
-        intensity_in_frame = intensity.T[total_mask]
-        sn_in_frame = sn.T[total_mask]
-
-        return pc_in_frame, intensity_in_frame, sn_in_frame, projected_colors
-
     def remove_center_outliers(self, centers_2D, img):
         u, v, z = centers_2D
         h, w, _ = img.shape
@@ -286,17 +197,18 @@ class KittiPreprocess:
         centers_2D = centers_2D.T[inliers_mask]
         return centers_2D, inliers_mask
 
-
     def __getitem__(self, index):
 
         img_folder, pc_folder, seq_i, img_i, cam_i = self.dataset[index]
         print(f'--------- Preprocessing {index}  -  seq_i: {seq_i}, img_i: {img_i}, cam_i: {cam_i} ---------')
 
+        # Load the img and pc
         img, pc, intensity, sn = self.load_item(img_folder, pc_folder, img_i)
-        pc_in_frame, intensity_in_frame, sn_in_frame, projected_colors = self.full_projection(pc, intensity, sn, img, seq_i, cam_i)
+        # Project the pc in the camera frame 
+        pc_in_frame, _, sn_in_frame, projected_colors = project_kitti(pc, intensity, sn, img, seq_i, cam_i)
 
         # Voxel Downsample pointcloud
-        ds_pc, ds_colors, ds_sn = self.voxel_down_sample(pc_in_frame, intensity_in_frame, sn_in_frame, projected_colors)
+        ds_pc, _, _ = self.voxel_down_sample(pc_in_frame, sn_in_frame, projected_colors)
         print(f' > [Downsample] original: {pc_in_frame.shape}, downsampled: {ds_pc.shape}')
 
         # Find neighbors for each point
@@ -304,12 +216,11 @@ class KittiPreprocess:
         print(f' > [Neighbors] original: {pc_in_frame.shape}, {neighbors_indices.shape}')
 
         # Project the 3D neighbourhoods center
-        centers_2D, center_depth_mask, in_image_center_mask, _ = self.project_pointcloud(centers_3D.T, img, seq_i, cam_i)
+        centers_2D, _, _, center_total_mask = project(centers_3D.T, img, seq_i, cam_i)
         centers_2D = np.floor(centers_2D).astype(int)
         centers_2D = centers_2D.T
 
         # Again, centers from the voxel down sample might fall outside the image bounds = need to filter
-        center_total_mask = self.combine_masks(center_depth_mask, in_image_center_mask)
         neighbors_indices = neighbors_indices[center_total_mask]
         centers_3D = centers_3D[center_total_mask]
 

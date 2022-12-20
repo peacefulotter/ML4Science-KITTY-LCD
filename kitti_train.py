@@ -27,7 +27,10 @@ def main():
 
     device = 'cuda' if args["device"] == 'cuda' and torch.cuda.is_available() else 'cpu'
 
-    dataset = KittiDataset(args["root"], mode="train")
+    dataset = KittiDataset(
+        args["root"], 
+        mode="train",
+    )
     loader = data.DataLoader(
         dataset,
         batch_size=args["batch_size"],

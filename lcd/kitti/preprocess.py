@@ -179,7 +179,7 @@ class KittiPreprocess:
             raise ValueError(f"mode {self.mode} unsupported")
 
         path = KittiPreprocess.resolve_data_path(img_folder, i)
-        np.savez(path, pc=pc, img=img, Pi=cam_i)
+        np.savez(path, pc=pc, img=img / 255, Pi=cam_i)
 
 
     def get_samples(self, img_folder):
@@ -198,7 +198,7 @@ class KittiPreprocess:
 
         print(f' > Storing in {img_folder} {len(neighbors_indices)} samples')
 
-        for i, indices in enumerate(neighbors_indices[:100]):
+        for i, indices in enumerate(neighbors_indices):
             center = centers_2D[i]
             neighbors_pc = pc_in_frame[indices]
             neighbors_rgb = colors[indices]

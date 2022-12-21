@@ -9,3 +9,4 @@ kitti_data/
 raw_kitti/
 raw/
 .DS_Store
+.ipynb_checkpoints/

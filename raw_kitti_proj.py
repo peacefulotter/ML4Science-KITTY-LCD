@@ -1,12 +1,30 @@
 
 import os
 import numpy as np
-from plots import plot_pc
 import matplotlib.pyplot as plt
 
 from PIL import Image
 
-from calib import read_calib_file, parse_calib_file, get_p, import_cam_to_cam, import_velo_to_cam
+from lcd.kitti.calib import read_calib_file, parse_calib_file, get_p, import_cam_to_cam, import_velo_to_cam
+from lcd.kitti.plots import plot_pc
+
+
+
+'''
+
+        =====================================================
+        
+        This file is not part of the ML4Science project 
+
+        This file projects a pointcloud on an image using the 
+        RAW Kitti dataset
+        
+        ======================================================
+
+
+'''
+
+
 
 def proj_matrix(calib, cam_i, Rt):
     """

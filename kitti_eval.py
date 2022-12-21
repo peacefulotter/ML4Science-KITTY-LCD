@@ -8,10 +8,9 @@ from lcd.models import *
 from lcd.losses import *
 
 from lcd.kitti.eval_dataset import KittiEvalDataset
-from lcd.descriptors import find_descriptors_correspondence
+from lcd.kitti.descriptors import find_descriptors_correspondence
 
-from lcd.kitti.metrics import get_errors
-from lcd.kitti.projection import projected_img_indices
+from lcd.kitti.metrics import get_estimated_pose, RRE, RTE
 
 @torch.no_grad()
 def main():
@@ -63,22 +62,36 @@ def main():
         print(batch[0].shape, batch[1].shape, batch[2].shape, batch[3].shape)
 
         print(f'[{i}] Forwading to model')
+        '''
+        Forward the evaluation batch containing all the possible img patches
+        of size (img_h, img_w) and "all" the neighbourhoods (1024 pointcloud points per point)
+        '''
         x = [x.to(device).float() for x in batch[:2]]
-        pcs, z0 = pointnet(x[0])
-        patches, z1 = patchnet(x[1])
+        _, z0 = pointnet(x[0])
+        _, z1 = patchnet(x[1])
 
         print(f'[{i}] Establishing descriptor correspondences')
+        '''
+        Establish the descriptor correspondences i.e. find the nearest neighbor 
+        from z0 to z1. 
+        '''
         correspondences = find_descriptors_correspondence(z0, z1)
         for i, correspondence in enumerate(correspondences):
-            pc = pcs[i]
-            # patch = patches[correspondence]
+            '''
+            For all found correspondences, get the camera intrinsic parameters (K),
+            get the ground truth rotation matrix and translation vector from the ground
+            truth pose and finally compute the RRE and RTE using PnPRansac and Rodrigues.
+            '''
+            pc = batch[0][i]
             origin = batch[2][correspondence]
             seq_i, img_i, cam_i = batch[3][i]
+            patch_size = (args['patch_h'], args['patch_w'])
+
             K = dataset.intrinsic_params(seq_i, cam_i)
             Rt, Tt = dataset.get_extracted_pose(seq_i, img_i)
-            rre, rte = get_errors(
-                pc, origin, dataset.patch_size, K, Rt, Tt, dist_thres=5
-            )
+            Re, Te = get_estimated_pose(pc, K, origin, patch_size)
+            rre, rte = RRE(Rt, Re), RTE(Tt, Te)
+            
             rres.append(rre)
             rtes.append(rte)
         

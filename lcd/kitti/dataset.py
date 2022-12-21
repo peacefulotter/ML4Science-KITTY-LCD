@@ -1,5 +1,4 @@
 import os
-import numpy as np
 import torch.utils.data as data
 
 from .preprocess import KittiPreprocess
@@ -59,52 +58,7 @@ class KittiDataset(data.Dataset):
         seq_i, img_i, sample = self.map_index(index)
         img_folder = KittiPreprocess.resolve_img_folder(self.root, seq_i, img_i)
         pc, img, Pi = KittiPreprocess.load_data(img_folder, sample)
+
+        print(pc.shape)
+
         return pc, img
-
-
-if __name__ == '__main__':
-
-    import sys
-    sys.path.append('../')
-    from models.patchnet import PatchNetAutoencoder
-    from models.pointnet import PointNetAutoencoder
-
-    root = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', '..')
-    dataset = KittiDataset(root=root, mode='debug')
-
-    """pc, img = dataset[199]
-    pc, colors = np.hsplit(pc, 2)
-    plots.plot_pc(pc, colors)"""
-
-    loader = data.DataLoader(
-        dataset,
-        batch_size=32,
-        num_workers=1,
-        pin_memory=True,
-        shuffle=True,
-    )
-    device = 'cpu'
-    patchnet = PatchNetAutoencoder(256, True)
-    pointnet = PointNetAutoencoder(256,6,6,True)
-    patchnet.to(device)
-    pointnet.to(device)
-
-    for i, batch in enumerate(loader):
-        x = [x.to(device).float() for x in batch]
-
-        # plots.plot_rgb_pc(batch[0][0])
-
-        pred_pcs, point_descriptors = pointnet(x[0])
-        pred_imgs, patch_descriptors = patchnet(x[1])
-        # Ks = x[2]
-
-        print("input batch", x[0].shape, x[1].shape)
-        print("pointnet output", pred_pcs.shape, point_descriptors.shape)
-        print("pathnet output", pred_imgs.shape, patch_descriptors.shape)
-
-        # for pred_rgb_pc, pred_img in zip(pred_pcs, pred_imgs):
-        #     pred_pc, colors = np.hsplit(pred_rgb_pc, 2)
-        #     pred_R, pred_t = metrics.get_pose(pred_pc, pred_img, K)
-        #     print("pred_pose")
-        #     print(pred_R.shape, pred_t.shape)
-        #     print(pred_R, pred_t)

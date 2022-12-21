@@ -3,11 +3,11 @@ import torch
 import numpy as np
 import open3d as o3d
 import torch.utils.data as data
-from sklearn.feature_extraction import image
 
 from .preprocess import KittiPreprocess
 from .pointcloud import downsample_neighbors
 from .patches import extract_patches_2d
+from .projection import project
 from .poses import import_poses
 
 class KittiEvalDataset(data.Dataset):
@@ -37,7 +37,8 @@ class KittiEvalDataset(data.Dataset):
         return np.asarray(down_pcd.points)
         
     def get_neighbourhoods(self, pc, img, seq_i, cam_i):
-        _, depth_mask, in_image_mask, colors = self.preprocess.project_pointcloud(pc, img, seq_i, cam_i)
+        print(pc.shape, img.shape, seq_i, cam_i)
+        _, depth_mask, in_image_mask, colors = project(self.preprocess.calibs, pc, img, seq_i, cam_i)
         total_mask = self.preprocess.combine_masks(depth_mask, in_image_mask)
         pc = pc.T[total_mask]
         ds_pc = self.voxel_down_sample(pc)

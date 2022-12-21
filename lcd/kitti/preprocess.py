@@ -9,6 +9,7 @@ from .calib import import_calibs
 class KittiPreprocess:
 
     KITTI_DATA_FOLDER = 'kitti_data'
+    MODES = ['all', 'train', 'test', 'debug']
     SEQ_LISTS = {
         "all": list(range(11)),
         "train": list(range(9)),
@@ -97,11 +98,11 @@ class KittiPreprocess:
 
     def get_cropped_img(self, center, img):
         '''
-        params:
-            center = (1, 3) - point that can be projected on the image
-            img = (H, W, 3) array of rgb values
-        returns:
-            cropped_img = (self.patch_h, self.patch_w)
+        Params:
+            - (1, 3) center: Point that can be projected onto the image
+            - (H, W, 3) img: RGB image
+        Returns:
+            - (self.patch_h, self.patch_w) cropped img 
         '''
         w, h = center[0], center[1]
         img_w, img_h = img.shape[1], img.shape[0]
@@ -136,7 +137,17 @@ class KittiPreprocess:
         return data['pc'], data['img'], data['Pi'].item()
 
     def save_data(self, img_folder, i, pc, img, cam_i):
+        '''
+        Save the data for a single sample (pair of num_pc points and (patch_h, patch_w) image).
+
+        Each "sample" file contains the following:
+        - (n, 6) pc: The RGB colored pointcloud containing only points 
+        that can be projected onto the image frame and lie in the image bounds
+        - (patch_h, patch_w, 3) img: RGB patch image
+        - Pi: ith camera (TODO: refactor name) 
+        '''
         if self.mode == "all":
+            # Save data on SCITAS in the scratch folder
             seq_dir, img_dir = os.path.split(img_folder)[-2:]
             print("output: ", end=" ")
             img_folder = os.path.join(os.path.expandvars("$SCRATCH"), "kitti", seq_dir, img_dir)
@@ -151,13 +162,21 @@ class KittiPreprocess:
         np.savez(path, pc=pc, img=img, Pi=cam_i)
 
     def get_samples(self, img_folder):
+        '''
+        Get the number of samples already present in the given img_folder
+        '''
         samples = 0
         if os.path.exists(img_folder):
             samples = round(len(os.listdir(img_folder)))
         return samples
 
     def store_result(self, seq_i, img_i, pc_in_frame, colors, centers_2D, img, neighbors_indices, cam_i):
-
+        '''
+        Save the preprocessed data into numerous "sample" npz files.
+        The file structure is as following:
+        - KITTI_DATA_FOLDER / seq_i / img_i / XXXXXXXX.npz 
+        See KittiPreprocess.save_data to know the format for a single file 
+        '''
         assert centers_2D.shape[0] == neighbors_indices.shape[0]
 
         img_folder = KittiPreprocess.resolve_img_folder(self.root, seq_i, img_i)
@@ -166,7 +185,15 @@ class KittiPreprocess:
 
         print(f' > Storing in {img_folder} {len(neighbors_indices)} samples')
 
-        for i, indices in enumerate(neighbors_indices[:100]):
+        for i, indices in enumerate(neighbors_indices):
+            '''
+            For each list of indices in the neighbors_indices list:
+            1. Get the (n, 3) points and (n, 3) rgb values
+            2. Concatenate them to have an RGB color per point into an (n, 6) shaped array
+            3. Get the patch of size (patch_h, patch_w) where 'center' lies at the center of the patch
+            4. Create the nested folders where the sample will be saved
+            5. Save the colored pointcloud along with the patch (see save_data)  
+            '''
             center = centers_2D[i]
             neighbors_pc = pc_in_frame[indices]
             neighbors_rgb = colors[indices]
@@ -176,6 +203,9 @@ class KittiPreprocess:
             self.save_data(img_folder, samples + i, neighbors_rgb_pc, cropped_img, cam_i)
 
     def make_nested_folders(self, folders):
+        '''
+        Create a series of nested folders starting from the kitti data folder
+        '''
         folders.insert(0, KittiPreprocess.KITTI_DATA_FOLDER)
         root = self.root
         for folder in folders:
@@ -184,18 +214,22 @@ class KittiPreprocess:
                 os.mkdir(root)
         return root
 
-    def save_calib_files(self):
-        for seq_i, seq_calib in enumerate(self.calibs):
-            path = self.make_nested_folders([str(seq_i)])
-            res = {}
-            for key, mat in seq_calib.items():
-                if key == 'P2' or key == 'P3':
-                    res[key] = mat
-            path = path + '/calib'
-            print(f" > Saving calib file {seq_i} to {path}")
-            np.savez(path, P2=res['P2'], P3=res['P3'])
+    # Might be useful for the lab later
+    # def save_calib_files(self):
+    #     for seq_i, seq_calib in enumerate(self.calibs):
+    #         path = self.make_nested_folders([str(seq_i)])
+    #         res = {}
+    #         for key, mat in seq_calib.items():
+    #             if key == 'P2' or key == 'P3':
+    #                 res[key] = mat
+    #         path = path + '/calib'
+    #         print(f" > Saving calib file {seq_i} to {path}")
+    #         np.savez(path, P2=res['P2'], P3=res['P3'])
 
     def remove_center_outliers(self, centers_2D, img):
+        '''
+        Remove points that lie outside the given image bounds
+        '''
         u, v, z = centers_2D
         h, w, _ = img.shape
         min_w = self.patch_w / 2
@@ -207,38 +241,60 @@ class KittiPreprocess:
         return centers_2D, inliers_mask
 
     def __getitem__(self, index):
+        '''
+        Main function: preprocessed the image at index "index" in the built dataset.
+        (see make_kitti_dataset).
 
+        1. Loads the pointcloud and image as numpy arrays
+        2. Project the pointcloud on the camera frame and retrieve the points
+        that project onto the image
+        3. Voxel down sample the n projected points
+        4. Use the downsampled points as centers for computing the neighbourhoods of size num_pc
+        (1024 for LCD). Discard the neighbourhoods of size less then min_pc and down or upsample the 
+        neighbourhoods depending on their size (upsample if size in [min_pc, num_c] and downsample if
+        size > num_pc)
+        5. Project the centers onto the image and retrieve a patch of (patch_h, patch_w) around each center.
+        6. Discard the centers where we can't obtain a patch such that the center is actually projected at the center of the patch (i.e.)
+        the projected center is too close to the image bounds, discard it.
+        7. Save the num_pc points neighbourhoods along with their colors and the patches (see store_result) 
+        '''
         img_folder, pc_folder, seq_i, img_i, cam_i = self.dataset[index]
         print(f'--------- Preprocessing {index}  -  seq_i: {seq_i}, img_i: {img_i}, cam_i: {cam_i} ---------')
 
-        # Load the img and pc
+        # 1. Load the img and pc
         img, pc, intensity, sn = self.load_item(img_folder, pc_folder, img_i)
-        # Project the pc in the camera frame 
-        pc_in_frame, _, sn_in_frame, projected_colors = project_kitti(pc, intensity, sn, img, seq_i, cam_i)
+        
+        # 2. Project the pc in the camera frame 
+        pc_in_frame, _, sn_in_frame, projected_colors = project_kitti(
+            self.calibs, pc, intensity, sn, img, seq_i, cam_i
+        )
 
-        # Voxel Downsample pointcloud
+        # 3. Voxel Downsample pointcloud
         ds_pc, _, _ = self.voxel_down_sample(pc_in_frame, sn_in_frame, projected_colors)
         print(f' > [Downsample] original: {pc_in_frame.shape}, downsampled: {ds_pc.shape}')
 
-        # Find neighbors for each point
+        # 4. Find neighbors for each point
         neighbors_indices, centers_3D  = downsample_neighbors(ds_pc, pc_in_frame, self.min_pc)
         print(f' > [Neighbors] original: {pc_in_frame.shape}, {neighbors_indices.shape}')
 
-        # Project the 3D neighbourhoods center
+        # 5. Project the 3D neighbourhoods center
         centers_2D, _, _, center_total_mask = project(centers_3D.T, img, seq_i, cam_i)
         centers_2D = np.floor(centers_2D).astype(int)
         centers_2D = centers_2D.T
 
+        '''
+        Should not happen because voxel down sample takes the average
         # Again, centers from the voxel down sample might fall outside the image bounds = need to filter
         neighbors_indices = neighbors_indices[center_total_mask]
         centers_3D = centers_3D[center_total_mask]
+        '''
 
-        # Remove points that fall outside of the img bounds
+        # 6. Remove points that fall outside of the img bounds
         centers_2D, inliers_mask = self.remove_center_outliers(centers_2D, img)
-
         neighbors_indices = neighbors_indices[inliers_mask]
         centers_3D = centers_3D[inliers_mask]
         
+        # 7. Save the result to sample files
         self.store_result(seq_i, img_i, pc_in_frame, projected_colors, centers_2D, img, neighbors_indices, cam_i)
 
 

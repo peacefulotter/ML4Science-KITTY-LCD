@@ -5,7 +5,7 @@ from .preprocess import KittiPreprocess
 
 class KittiDataset(data.Dataset):
     '''
-    This is the dataset class to use the preprocessed data 
+    This is the training dataset class to use the preprocessed data 
     from KittiPreprocess. 
 
     This class is pretty straightforward as KittiPreprocess is the one

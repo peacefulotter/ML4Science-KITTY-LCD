@@ -29,7 +29,7 @@ def main():
 
     dataset = KittiDataset(
         args["root"], 
-        mode="train",
+        mode="debug",
     )
     loader = data.DataLoader(
         dataset,
@@ -72,7 +72,7 @@ def main():
         scalars = defaultdict(list)
 
         for i, batch in enumerate(loader):
-            x = [x.to(device) for x in batch]
+            x = [x.to(device).float() for x in batch]
 
             y0, z0 = pointnet(x[0])
             y1, z1 = patchnet(x[1])

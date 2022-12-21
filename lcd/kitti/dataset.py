@@ -4,6 +4,16 @@ import torch.utils.data as data
 from .preprocess import KittiPreprocess
 
 class KittiDataset(data.Dataset):
+    '''
+    This is the dataset class to use the preprocessed data 
+    from KittiPreprocess. 
+
+    This class is pretty straightforward as KittiPreprocess is the one
+    that does all the work, i.e. this class basically maps the index (given in __get_item__) 
+    to a tuple (sequence index, image index, sample index) and loads the preprocessed
+    files at `root / KITTI_DATA_FOLDER / sequence_index / image_index / sample_index`. 
+    '''
+
     def __init__(self, root, mode, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.root = root
@@ -17,6 +27,13 @@ class KittiDataset(data.Dataset):
         print(' > samples structure:', self.samples)
 
     def build_dataset(self):
+        '''
+        Reads and saves the file structure.
+        For each sequence folder in the kitti data folder:
+            For each image folder in the sequence folder:
+                number of samples = number of files
+        Ignores other types of files such as calibs files.
+        '''
         base_folder = os.path.join(self.root, KittiPreprocess.KITTI_DATA_FOLDER)
         for seq_i in self.seq_list:
             self.samples[seq_i] = {}
@@ -32,8 +49,9 @@ class KittiDataset(data.Dataset):
                 self.samples[seq_i][img_folder] = img_samples
                 nb_img += 1
 
-    # TODO: (focus on projection first), in case we really need to save preprocessed calib files and 
-    # import them in the dataset 
+
+    # In the end not used because of the many projection issues
+    # but might be useful for the lab later 
     # def import_calibs(self):
     #     calibs = [{} for i in range(len(self.seq_list))]
     #     base_folder = os.path.join(self.root, KittiPreprocess.KITTI_DATA_FOLDER)
@@ -44,6 +62,11 @@ class KittiDataset(data.Dataset):
     #     return calibs
 
     def map_index(self, idx):
+        '''
+        Maps an index 'idx' to a tuple (seq_i, img_i, sample_i)
+        using the file structure built during the class initialization 
+        (see build_dataset)
+        '''
         samples = 0
         for seq_i, seq_samples in self.samples.items():
             for img_i, img_samples in seq_samples.items():
@@ -55,10 +78,16 @@ class KittiDataset(data.Dataset):
         return self.total_samples
 
     def __getitem__(self, index):
-        seq_i, img_i, sample = self.map_index(index)
-        img_folder = KittiPreprocess.resolve_img_folder(self.root, seq_i, img_i)
-        pc, img, Pi = KittiPreprocess.load_data(img_folder, sample)
+        '''
+        1. Map the given index to a tuple (seq_i, img_i, sample_i) using the file structure
+        built during class initialization
+        2. Load the preprocessed npz file at `root / KITTI_DATA_FOLDER / seq_i / img_i / sample_i`. 
+        3. Return the RGB colored pointcloud and patch
 
-        print(pc.shape)
-
-        return pc, img
+        Returns:
+        - (n, 6) pc: RGB colored pointcloud
+        - (patch_h, patch_w, 3): RGB patch image, patch_h and patch_w are parameters defined during preprocessing
+        '''
+        seq_i, img_i, sample_i = self.map_index(index)
+        pc, patch, _ = KittiPreprocess.load_data(self.root, seq_i, img_i, sample_i)
+        return pc, patch

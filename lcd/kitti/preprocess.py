@@ -7,6 +7,12 @@ from .projection import project, project_kitti
 from .calib import import_calibs
 
 class KittiPreprocess:
+    '''
+    This is the preprocessing class for using the KITTI dataset on
+    the LCD input format.
+
+    See the __get_item__ function for more informations on how the preprocessing works.
+    '''
 
     KITTI_DATA_FOLDER = 'kitti_data'
     MODES = ['all', 'train', 'test', 'debug']
@@ -127,12 +133,12 @@ class KittiPreprocess:
         )
 
     @staticmethod
-    def load_data(img_folder, sample):
+    def load_data(root, seq_i, img_i, sample_i):
         '''
-        img_folder: using KittiPreprocess.resolve_img_folder
         sample: ith sample
         '''
-        path = KittiPreprocess.resolve_data_path(img_folder, sample)
+        img_folder = KittiPreprocess.resolve_img_folder(root, seq_i, img_i)
+        path = KittiPreprocess.resolve_data_path(img_folder, sample_i)
         data = np.load(path)
         return data['pc'], data['img'], data['Pi'].item()
 
@@ -324,8 +330,7 @@ if __name__ == '__main__':
     seq_i = 0
     img_i = 2
     samples = 20
-    img_folder = preprocess.resolve_img_folder(root, seq_i, img_i)
-    for sample in range(samples):
-        pc, img, Pi = preprocess.load_data(img_folder, sample)
-        print(f' > Success, sample: {sample} {pc.shape}, {img.shape}, {Pi}')
+    for sample_i in range(samples):
+        pc, img, Pi = preprocess.load_data(root, seq_i, img_i, sample_i)
+        print(f' > Success, sample: {sample_i} {pc.shape}, {img.shape}, {Pi}')
         # plots.plot_rgb_pc(pc)

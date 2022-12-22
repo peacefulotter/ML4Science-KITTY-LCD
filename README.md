@@ -16,26 +16,60 @@ In the interest of applying theoretical knowledge learned in the course "Machine
 The idea behind this project is to adapt the [LCD model](https://github.com/hkust-vgd/lcd "LCD model") to the [KITTI dataset](https://www.cvlibs.net/datasets/kitti/ "KITTI dataset") or the inverse. Once this is complete, the model can be trained and tested on this dataset so as to directly test its performance on a widely used dataset such as KITTI. Not only this, the LCD model has only currently been tested indoors so the varied scenarios of the KITTI dataset will serve as a good test for robustness.
 
 ## Installation
-1. Clone the master branch
+1. Clone the repo
+```
+git clone https://github.com/peacefulotter/ML4Science-KITTY-LCD.git
+cd ML4Science-KITTY-LCD
+```
 1. Install dependencies listed below
-1. Download dataset from: todo ....
+```
+pip3 install numpy scipy pytorch opencv-python faiss open3d
+```
+1. Download dataset following the instruction [here](https://github.com/rsy6318/CorrI2P#data) (courtesy to CorrI2P). Please make sure you have disk space of more than 150 GB.
+Placing the unzipped data into `data`.
+
 
 
 ## How to use
+We have two branches in this repo, `master` and `server`.
+`master` is for local development, and `server` contains some hacks in order to run more smoothly 
+on the EPFL Scitas cluster.
+
 ### Local: master branch
+This is for development on a local machine,
 Once inside the ML4Science-KITTI-LCD directory run these commands:
 
-For training:
+Preparing the data:
+```bash
+cd lcd/kitti
+python preprocess.py
+```
+
+Training:
 ```bash
 python kitti_train.py
 ```
-This will automatically preprocess the KITTI data and save each sample of a sequence in the folder 'kitti_data' using subfolders to divide the data. I.e. The first sample for of the first sequence will be stored in "kitti_data/0/0.npz".
+This will automatically preprocess the KITTI data and save each sample of a sequence in the folder `kitti_data` using subfolders to divide the data, i.e., The first sample for of the first sequence will be stored in `kitti_data/0/0.npz`.
 
-For testing
+Testing:
 ```bash
 python kitti_eval.py
 ```
 This will take the trained model and preprocessed data and then print the respective performance of each image patch and pointnet against the ground truth data.
+
+
+### EPFL Scitas: server branch
+
+Please use the prepared scripts for launching the jobs
+Preparing the data:
+```bash
+sbatch preprocessing.sbatch
+```
+
+Training:
+```bash
+python kitti_train.py
+```
 
 ## Dependencies
 - numpy

@@ -5,7 +5,7 @@
 * [Goal](#goal)
 * [Installation](#installation)
 * [How to use](#how-to-use)
-* [Dependencies](#dependenciess)
+* [Dependencies](#dependencies)
 * [Repository structure overview](#repository-structure-overview)
 * [LCD outline](#lcd-outline)
 

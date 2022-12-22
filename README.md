@@ -21,11 +21,11 @@ The idea behind this project is to adapt the [LCD model](https://github.com/hkus
 git clone https://github.com/peacefulotter/ML4Science-KITTY-LCD.git
 cd ML4Science-KITTY-LCD
 ```
-1. Install dependencies listed below
+2. Install dependencies listed below
 ```
 pip3 install numpy scipy pytorch opencv-python faiss open3d
 ```
-1. Download dataset following the instruction [here](https://github.com/rsy6318/CorrI2P#data) (courtesy to CorrI2P). Please make sure you have disk space of more than 150 GB.
+3. Download dataset following the instruction [here](https://github.com/rsy6318/CorrI2P#data) (courtesy to CorrI2P). Please make sure you have disk space of more than 150 GB.
 Placing the unzipped data into `data`.
 
 

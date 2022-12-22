@@ -2,9 +2,8 @@ import os
 import numpy as np
 # import open3d as o3d
 
-from pointcloud import downsample_neighbors
-import calib
-import plots
+from lcd.kitti.pointcloud import downsample_neighbors
+from lcd.kitti import calib, plots
 
 from argparse import ArgumentParser
 argparser = ArgumentParser()
@@ -19,6 +18,7 @@ class KittiPreprocess:
         "test": [9, 10],
         "debug": [0]
     }
+    DATASET_TYPES = list(SEQ_LISTS.keys())
 
     def __init__(self, root, mode, patch_w=64, patch_h=64, num_pc=1024, min_pc=32):
         '''

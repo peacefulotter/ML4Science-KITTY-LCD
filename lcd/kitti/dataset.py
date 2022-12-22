@@ -2,8 +2,8 @@ import os
 import numpy as np
 import torch.utils.data as data
 
-from preprocess import KittiPreprocess
-import metrics
+from lcd.kitti.preprocess import KittiPreprocess
+import lcd.kitti.metrics
 
 class KittiDataset(data.Dataset):
     def __init__(self, root, mode: KittiPreprocess.DATASET_TYPES, *args, **kwargs):

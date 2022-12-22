@@ -14,7 +14,6 @@ from lcd.kitti.dataset import KittiDataset
 
 
 def main():
-    config = "./config_kitti.json"
     logdir = "./logs/LCD"
     args = json.load(open(config))
 

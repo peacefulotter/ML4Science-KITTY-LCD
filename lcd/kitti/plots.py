@@ -2,7 +2,7 @@ import numpy as np
 # import open3d as o3d
 import matplotlib.pyplot as plt
 
-import pointcloud 
+from lcd.kitti import pointcloud 
 # from pointcloud import project_image, proj_pixel_coordinates
 # from .pointcloud import project_image, proj_pixel_coordinates
 

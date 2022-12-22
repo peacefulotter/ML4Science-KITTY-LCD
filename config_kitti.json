@@ -3,7 +3,7 @@
     "device": "cuda",
     "epochs": 250,
     "batch_size": 64,
-    "num_workers": 8,
+    "num_workers": 1,
     "input_channels": 6,
     "output_channels": 6,
     "embedding_size": 256,

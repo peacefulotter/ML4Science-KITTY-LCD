@@ -60,7 +60,8 @@ This will take the trained model and preprocessed data and then print the respec
 
 ### EPFL Scitas: server branch
 
-Please use the prepared scripts for launching the jobs
+Please use the prepared scripts for launching the jobs through slurm.
+
 Preparing the data:
 ```bash
 sbatch preprocessing.sbatch
@@ -68,7 +69,7 @@ sbatch preprocessing.sbatch
 
 Training:
 ```bash
-python kitti_train.py
+sbatch training.sbatch
 ```
 
 ## Dependencies

@@ -10,7 +10,7 @@
 * [LCD outline](#lcd-outline)
 
 ## Abstract
-In the interest of applying theoretical knowledge learned in the course "Machine Learning" at EPFL, this project was created and supervised by the Geodetic Engineering Laboratory of EPFL. We were given an inital proposition which may be found [here](https://www.epfl.ch/labs/topo/student_projects/aerial-2d-and-3d-vision-a-joint-deep-learning-assisted-application/ "here"). In particular, this project was supervised by Kyriaki Mouzakidou,  Jesse Lahaye and Aurélien Arnaud Brun of the Geodetic Engineering Laboratory of EPFL.
+In the interest of applying theoretical knowledge learned in the course "Machine Learning" at EPFL, this project was created and supervised by the Geodetic Engineering Laboratory of EPFL. We were given an inital proposition which may be found [here](https://www.epfl.ch/labs/topo/student_projects/aerial-2d-and-3d-vision-a-joint-deep-learning-assisted-application/ "here"). In particular, this project was supervised by Kyriaki Mouzakidou,  Jesse Lahaye and Aurélien Arnaud Brun of the Geodetic Engineering Laboratory (Laboratoire de Topométrie) of EPFL.
 
 ## Goal
 The idea behind this project is to adapt the [LCD model](https://github.com/hkust-vgd/lcd "LCD model") to the [KITTI dataset](https://www.cvlibs.net/datasets/kitti/ "KITTI dataset") or the inverse. Once this is complete, the model can be trained and tested on this dataset so as to directly test its performance on a widely used dataset such as KITTI. Not only this, the LCD model has only currently been tested indoors so the varied scenarios of the KITTI dataset will serve as a good test for robustness.
